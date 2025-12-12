@@ -9,7 +9,7 @@ site_url: https://yohasacura.github.io/dtde/
 # Repository
 repo_name: yohasacura/dtde
 repo_url: https://github.com/yohasacura/dtde
-edit_uri: edit/master/docs/
+edit_uri: edit/main/docs/
 
 # Copyright
 copyright: Copyright &copy; 2025 DTDE Contributors
@@ -170,6 +170,6 @@ extra:
 extra_css:
   - stylesheets/extra.css
 
-# Docs directory is now the same as config location
-docs_dir: .
-site_dir: site
+# Watch directories for live reload
+watch:
+  - docs
