@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- Benchmarks don't need security-level randomness or strict collection patterns -->
+    <NoWarn>$(NoWarn);CA5394;CA1002;CA2227</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
