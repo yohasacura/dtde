@@ -93,6 +93,8 @@ jobs:
       - name: NuGet Trusted Publishing Login
         uses: nuget/login@v1
         id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}
 
       - name: Push to NuGet
         run: |
