@@ -350,21 +350,42 @@ Comprehensive benchmarks comparing single table vs sharded approaches:
 
 | Component | Specification |
 |-----------|---------------|
+| **OS** | Windows 11 (10.0.26200.7462) |
 | **CPU** | 12th Gen Intel Core i9-12900H (14 cores, 20 threads) |
-| **Runtime** | .NET 9.0, RyuJIT AVX2 |
+| **Runtime** | .NET 9.0.10, RyuJIT AVX2 |
+| **SDK** | .NET SDK 10.0.101 |
 | **Database** | SQLite (file-based, separate DBs per benchmark) |
-| **Framework** | BenchmarkDotNet 0.15.0 |
+| **Framework** | BenchmarkDotNet v0.15.0 |
 
 ### Key Results
 
 | Query Type | Records | Single Table | Sharded | Improvement |
 |------------|---------|-------------|---------|-------------|
-| **Point Lookup** | 100K | 143.9 ns | 146.5 ns | ~Same |
-| **Date Range (1 month)** | 100K | 16,103 µs | 3,596 µs | **4.5x faster** |
-| **Region Scan** | 100K | 3,659 µs | 1,786 µs | **2.0x faster** |
-| **Count** | 50K | 3,534 µs | 26.0 µs | **136x faster** |
+| **Point Lookup (by ID)** | 100K | 153.1 ns | 145.7 ns | ~Same |
+| **Date Range (1 month)** | 100K | 16,257 µs | 3,555 µs | **4.6x faster** |
+| **Region Scan (single)** | 100K | 3,638 µs | 1,774 µs | **2.1x faster** |
+| **Region Scan (all)** | 100K | 5,535 µs | 2,014 µs | **2.7x faster** |
+| **Count (all records)** | 100K | 7,873 µs | 1,330 µs | **5.9x faster** |
+| **Count (all records)** | 50K | 3,387 µs | 24.1 µs | **141x faster** |
 
-**Key insight:** Sharded queries benefit significantly from partition pruning — queries that target a specific shard key value only scan relevant partitions.
+### Concurrent Access Performance
+
+| Scenario | Threads | Single Table | Sharded | Improvement |
+|----------|---------|-------------|---------|-------------|
+| **Parallel Aggregation** | 4 | 1,668 µs | 546 µs | **3.1x faster** |
+| **Parallel Aggregation** | 8 | 2,043 µs | 696 µs | **2.9x faster** |
+| **Parallel Reads (diff regions)** | 4 | 1,822 µs | 542 µs | **3.4x faster** |
+| **Parallel Reads (diff regions)** | 8 | 2,479 µs | 758 µs | **3.3x faster** |
+
+### Write Operations
+
+| Operation | Batch Size | Single Table | Sharded | Notes |
+|-----------|------------|-------------|---------|-------|
+| **Batch Update** | 100 | 414.5 µs | 317.7 µs | **23% faster** |
+| **Batch Update** | 1000 | 388.8 µs | 299.5 µs | **23% faster** |
+| **Batch Delete** | 100 | 326.8 µs | 302.4 µs | ~Same |
+
+**Key insight:** Sharded queries benefit significantly from partition pruning — queries that target a specific shard key value only scan relevant partitions. Concurrent workloads show even greater improvements due to reduced contention.
 
 ### When to Use Sharding
 
@@ -375,6 +396,7 @@ Comprehensive benchmarks comparing single table vs sharded approaches:
 - Geographic distribution requirements
 - High write throughput needs
 - Hot/cold data patterns
+- Concurrent read-heavy workloads
 
 ⚠️ **Consider carefully:**
 - Small datasets (<100K rows)
