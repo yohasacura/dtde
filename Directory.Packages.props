@@ -19,9 +19,9 @@
 
   <ItemGroup Label="Microsoft.Extensions">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="9.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="9.0.11" />
@@ -29,12 +29,12 @@
   </ItemGroup>
 
   <ItemGroup Label="ASP.NET Core">
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.11" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="7.2.0" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.1" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
