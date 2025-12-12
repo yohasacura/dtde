@@ -1,0 +1,269 @@
+### DTDE Combined Sharding Strategies API Tests
+### This file tests multiple sharding strategies in one application
+
+@baseUrl = http://localhost:5004
+
+### ============================================
+### ACCOUNTS - Property-Based Sharding by Region
+### ============================================
+
+### Create EU account
+POST {{baseUrl}}/api/accounts
+Content-Type: application/json
+
+{
+  "region": "EU",
+  "accountType": "Checking",
+  "currency": "EUR",
+  "holderId": "holder-eu-001",
+  "initialDeposit": 10000.00
+}
+
+###
+
+### Create US account
+POST {{baseUrl}}/api/accounts
+Content-Type: application/json
+
+{
+  "region": "US",
+  "accountType": "Savings",
+  "currency": "USD",
+  "holderId": "holder-us-001",
+  "initialDeposit": 25000.00
+}
+
+###
+
+### Create APAC account
+POST {{baseUrl}}/api/accounts
+Content-Type: application/json
+
+{
+  "region": "APAC",
+  "accountType": "Investment",
+  "currency": "JPY",
+  "holderId": "holder-apac-001",
+  "initialDeposit": 5000000.00
+}
+
+###
+
+### Get accounts by region (EU)
+GET {{baseUrl}}/api/accounts/region/EU
+
+###
+
+### Get accounts by region (US)
+GET {{baseUrl}}/api/accounts/region/US
+
+###
+
+### Get account by number (replace with actual account number from create response)
+GET {{baseUrl}}/api/accounts/{accountNumber}
+
+###
+
+### ============================================
+### TRANSACTIONS - Date-Based Sharding (Monthly)
+### ============================================
+
+### Create deposit transaction (use actual account number)
+POST {{baseUrl}}/api/transactions
+Content-Type: application/json
+
+{
+  "accountNumber": "{accountNumber}",
+  "transactionType": "Deposit",
+  "amount": 5000.00,
+  "currency": "EUR",
+  "description": "Salary deposit"
+}
+
+###
+
+### Create withdrawal transaction
+POST {{baseUrl}}/api/transactions
+Content-Type: application/json
+
+{
+  "accountNumber": "{accountNumber}",
+  "transactionType": "Withdrawal",
+  "amount": 1000.00,
+  "description": "Rent payment"
+}
+
+###
+
+### Create transfer transaction
+POST {{baseUrl}}/api/transactions
+Content-Type: application/json
+
+{
+  "accountNumber": "{accountNumber}",
+  "transactionType": "Transfer",
+  "amount": 2500.00,
+  "description": "Transfer to savings",
+  "counterpartyAccount": "{targetAccountNumber}"
+}
+
+###
+
+### Get transactions for a month
+GET {{baseUrl}}/api/transactions/month/2025/12
+
+###
+
+### Get transactions for account
+GET {{baseUrl}}/api/transactions/account/{accountNumber}?fromDate=2025-01-01
+
+###
+
+### ============================================
+### REGULATORY DOCUMENTS - Property-Based (DocumentType)
+### ============================================
+
+### Create Policy document
+POST {{baseUrl}}/api/documents
+Content-Type: application/json
+
+{
+  "documentType": "Policy",
+  "title": "Data Protection Policy",
+  "jurisdiction": "European Union",
+  "effectiveDate": "2025-01-01",
+  "contentUrl": "https://docs.example.com/policies/data-protection"
+}
+
+###
+
+### Create Guideline document
+POST {{baseUrl}}/api/documents
+Content-Type: application/json
+
+{
+  "documentType": "Guideline",
+  "title": "KYC Verification Guidelines",
+  "jurisdiction": "United States",
+  "effectiveDate": "2025-06-01",
+  "contentUrl": "https://docs.example.com/guidelines/kyc"
+}
+
+###
+
+### Create Report document
+POST {{baseUrl}}/api/documents
+Content-Type: application/json
+
+{
+  "documentType": "Report",
+  "title": "Q4 2025 Compliance Report",
+  "jurisdiction": "International",
+  "effectiveDate": "2025-12-01",
+  "contentUrl": "https://docs.example.com/reports/q4-2025"
+}
+
+###
+
+### Get documents by type (Policy)
+GET {{baseUrl}}/api/documents/type/Policy
+
+###
+
+### Get documents by type (Guideline)
+GET {{baseUrl}}/api/documents?documentType=Policy
+
+###
+
+### Get documents by region
+GET {{baseUrl}}/api/documents?region=EU
+
+###
+
+### Get document by ID
+GET {{baseUrl}}/api/documents/{documentId}
+
+###
+
+### Search documents
+GET {{baseUrl}}/api/documents/search?keyword=policy
+
+###
+
+### Get document statistics
+GET {{baseUrl}}/api/documents/stats
+
+###
+
+### ============================================
+### COMPLIANCE AUDITS - Hash-Based Sharding
+### ============================================
+
+### Create audit for account creation
+POST {{baseUrl}}/api/audits
+Content-Type: application/json
+
+{
+  "entityReference": "{accountNumber}",
+  "entityType": "Account",
+  "auditType": "Creation",
+  "performedBy": "system-admin",
+  "changes": "Account opened",
+  "reason": "New customer account opened"
+}
+
+###
+
+### Create audit for transaction
+POST {{baseUrl}}/api/audits
+Content-Type: application/json
+
+{
+  "entityReference": "TXN-2025-001",
+  "entityType": "Transaction",
+  "auditType": "Modification",
+  "performedBy": "user-finance-01",
+  "changes": "Status changed from Pending to Completed",
+  "reason": "Transaction approved"
+}
+
+###
+
+### Create audit for document access
+POST {{baseUrl}}/api/audits
+Content-Type: application/json
+
+{
+  "entityReference": "{documentId}",
+  "entityType": "Document",
+  "auditType": "Access",
+  "performedBy": "compliance-officer",
+  "reason": "Quarterly compliance review"
+}
+
+###
+
+### Get audits by entity reference
+GET {{baseUrl}}/api/audits/entity/{entityReference}
+
+###
+
+### Get audit by ID
+GET {{baseUrl}}/api/audits/{auditId}
+
+###
+
+### Get audits pending review
+GET {{baseUrl}}/api/audits/pending-review
+
+###
+
+### Get recent audits
+GET {{baseUrl}}/api/audits/recent?limit=50
+
+###
+
+### Get audit distribution stats
+GET {{baseUrl}}/api/audits/stats/distribution
+
+###

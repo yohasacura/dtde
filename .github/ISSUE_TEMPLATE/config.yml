@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/yohasacura/dtde/tree/main/docs
+    about: Read the DTDE docs and guides
+  - name: Troubleshooting
+    url: https://github.com/yohasacura/dtde/blob/main/docs/wiki/troubleshooting.md
+    about: Common issues and fixes
+  - name: Security vulnerabilities
+    url: https://github.com/yohasacura/dtde/security/advisories/new
+    about: Please report vulnerabilities privately

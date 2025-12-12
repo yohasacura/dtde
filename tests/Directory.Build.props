@@ -1,0 +1,18 @@
+<Project>
+  <!-- Inherit from parent Directory.Build.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!--
+      Disable opinionated code analysis warnings for test projects.
+      Tests have different conventions and priorities than library code.
+    -->
+    <NoWarn>$(NoWarn);CA1707;CA1852;CA1859;CA2007</NoWarn>
+    <!--
+      CA1707 - Identifiers should not contain underscores (test naming convention uses underscores)
+      CA1852 - Type can be sealed (test classes often need flexibility)
+      CA1859 - Use concrete types for improved performance (tests prioritize clarity)
+      CA2007 - ConfigureAwait (not needed in test code)
+    -->
+  </PropertyGroup>
+</Project>

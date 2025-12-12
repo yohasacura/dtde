@@ -1,0 +1,159 @@
+### DTDE Date Sharding API Tests
+### This file tests date-based sharding for time-series data
+
+@baseUrl = http://localhost:5001
+
+### ============================================
+### TRANSACTIONS - Sharded by TransactionDate (Monthly)
+### ============================================
+
+### Create Credit transaction
+POST {{baseUrl}}/api/transactions
+Content-Type: application/json
+
+{
+  "accountNumber": "ACC-12345",
+  "type": 0,
+  "amount": 1500.00,
+  "description": "Monthly salary",
+  "category": "Income",
+  "merchant": "Employer Corp"
+}
+
+###
+
+### Create Debit transaction
+POST {{baseUrl}}/api/transactions
+Content-Type: application/json
+
+{
+  "accountNumber": "ACC-12345",
+  "type": 1,
+  "amount": 250.00,
+  "description": "Utility bill",
+  "category": "Bills",
+  "merchant": "Power Company"
+}
+
+###
+
+### Get transactions for date range
+GET {{baseUrl}}/api/transactions?fromDate=2025-01-01&toDate=2025-12-31
+
+###
+
+### Get transactions for specific month (single shard)
+GET {{baseUrl}}/api/transactions/month/2025/12
+
+###
+
+### Get account statement
+GET {{baseUrl}}/api/transactions/statement/ACC-12345?fromDate=2025-01-01&toDate=2025-12-31
+
+###
+
+### ============================================
+### AUDIT LOGS - Sharded by Timestamp (Daily)
+### ============================================
+
+### Create audit log entry
+POST {{baseUrl}}/api/auditlogs
+Content-Type: application/json
+
+{
+  "userId": "user-123",
+  "action": "UserLogin",
+  "entityType": "User",
+  "entityId": "user-123",
+  "ipAddress": "192.168.1.100",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+  "correlationId": "corr-001"
+}
+
+###
+
+### Create another audit log
+POST {{baseUrl}}/api/auditlogs
+Content-Type: application/json
+
+{
+  "userId": "user-123",
+  "action": "DataExport",
+  "entityType": "Report",
+  "entityId": "report-456",
+  "oldValues": "{\"status\": \"draft\"}",
+  "newValues": "{\"status\": \"exported\"}",
+  "ipAddress": "192.168.1.100",
+  "correlationId": "corr-002"
+}
+
+###
+
+### Get audit logs for today
+GET {{baseUrl}}/api/auditlogs?fromDate=2025-12-11&toDate=2025-12-12
+
+###
+
+### Get audit logs by user
+GET {{baseUrl}}/api/auditlogs?userId=user-123
+
+###
+
+### Get audit logs by correlation ID
+GET {{baseUrl}}/api/auditlogs?correlationId=corr-001
+
+###
+
+### ============================================
+### METRICS - Sharded by Timestamp (Quarterly)
+### ============================================
+
+### Record metric data point
+POST {{baseUrl}}/api/metrics
+Content-Type: application/json
+
+{
+  "metricName": "cpu.usage",
+  "value": 75.5,
+  "timestamp": "2025-12-11T10:00:00Z",
+  "source": "server-01",
+  "unit": "percent",
+  "tags": "env:production,region:us-east"
+}
+
+###
+
+### Record another metric
+POST {{baseUrl}}/api/metrics
+Content-Type: application/json
+
+{
+  "metricName": "memory.used",
+  "value": 8192.0,
+  "timestamp": "2025-12-11T10:00:00Z",
+  "source": "server-01",
+  "unit": "MB",
+  "tags": "env:production,region:us-east"
+}
+
+###
+
+### Get metrics for time range
+GET {{baseUrl}}/api/metrics?fromTime=2025-12-11T00:00:00Z&toTime=2025-12-11T23:59:59Z
+
+###
+
+### Get metrics by name
+GET {{baseUrl}}/api/metrics?metricName=cpu.usage
+
+###
+
+### Get latest metrics
+GET {{baseUrl}}/api/metrics/latest?minutes=60
+
+###
+
+### Get aggregated metrics
+GET {{baseUrl}}/api/metrics/aggregate?fromTime=2025-12-11T00:00:00Z&toTime=2025-12-11T23:59:59Z&metricName=cpu.usage
+
+###

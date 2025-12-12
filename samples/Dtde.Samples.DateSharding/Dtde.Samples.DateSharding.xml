@@ -1,0 +1,317 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Dtde.Samples.DateSharding</name>
+    </assembly>
+    <members>
+        <member name="T:Dtde.Samples.DateSharding.Controllers.AuditLogsController">
+            <summary>
+            API controller demonstrating daily-sharded audit log queries.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.AuditLogsController.GetLogsForDay(System.DateTime,System.String,System.String,System.Int32)">
+            <summary>
+            Get audit logs for a specific day (single shard, most efficient).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.AuditLogsController.GetRecentLogs(System.Int32,System.Int32)">
+            <summary>
+            Get recent audit logs (today, queries hot shard).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.AuditLogsController.SearchLogs(System.DateTime,System.DateTime,System.String,System.String,System.String,System.String,System.Int32,System.Int32)">
+            <summary>
+            Search audit logs across a date range.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.AuditLogsController.CreateAuditLog(Dtde.Samples.DateSharding.Controllers.CreateAuditLogRequest)">
+            <summary>
+            Create an audit log entry.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.AuditLogsController.GetDailyStats(System.Int32)">
+            <summary>
+            Get audit statistics by day.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.DateSharding.Controllers.MetricsController">
+            <summary>
+            API controller demonstrating hourly-sharded metrics queries.
+            Hourly sharding is ideal for high-volume time-series data.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.MetricsController.GetMetricsForHour(System.DateTime,System.String,System.String,System.Int32)">
+            <summary>
+            Get metrics for a specific hour (single shard, most efficient).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.MetricsController.GetAggregatedMetrics(System.DateTime,System.DateTime,System.String,System.String,System.String)">
+            <summary>
+            Get aggregated metrics over a time range.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.MetricsController.GetLatestMetrics(System.Int32)">
+            <summary>
+            Get latest metrics (queries recent hourly shards).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.MetricsController.BatchIngestMetrics(Dtde.Samples.DateSharding.Controllers.BatchIngestRequest)">
+            <summary>
+            Batch ingest metrics (routes to appropriate hourly shards).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.MetricsController.CreateMetric(Dtde.Samples.DateSharding.Controllers.CreateMetricRequest)">
+            <summary>
+            Create a single metric data point.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.MetricsController.GetMetricNames(System.Int32)">
+            <summary>
+            Get available metric names.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.MetricsController.GetMetricSources(System.Int32)">
+            <summary>
+            Get metric sources.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.DateSharding.Controllers.TransactionsController">
+            <summary>
+            API controller demonstrating date-based sharding queries.
+            Shows efficient time-range queries that target specific shards.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.TransactionsController.GetTransactions(System.DateTime,System.DateTime,System.String,System.Nullable{Dtde.Samples.DateSharding.Entities.TransactionType},System.Int32,System.Int32)">
+            <summary>
+            Get transactions for a date range.
+            DTDE automatically routes to the relevant monthly shards.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.TransactionsController.GetTransactionsByMonth(System.Int32,System.Int32,System.String)">
+            <summary>
+            Get transactions for a specific month (single shard query).
+            Most efficient query as it targets exactly one shard.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.TransactionsController.GetStatement(System.String,System.DateTime,System.DateTime)">
+            <summary>
+            Get account statement for a period.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.TransactionsController.CreateTransaction(Dtde.Samples.DateSharding.Controllers.CreateTransactionRequest)">
+            <summary>
+            Create a new transaction.
+            DTDE routes to the correct monthly shard based on TransactionDate.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.DateSharding.Controllers.TransactionsController.GetMonthlyStats(System.Int32,System.String)">
+            <summary>
+            Get monthly summary statistics.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.DateSharding.Data.DateShardingDbContext">
+            <summary>
+            DbContext demonstrating date-based sharding.
+            
+            Entities are partitioned by date:
+            - Transactions: Monthly partitions (Transactions_2024_01, etc.)
+            - AuditLogs: Daily partitions (AuditLogs_2024_01_15, etc.)
+            - Metrics: Quarterly partitions for longer retention
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Data.DateShardingDbContext.Transactions">
+            <summary>
+            Transactions - sharded by TransactionDate (monthly).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Data.DateShardingDbContext.AuditLogs">
+            <summary>
+            Audit logs - sharded by Timestamp (daily).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Data.DateShardingDbContext.MetricDataPoints">
+            <summary>
+            Metrics - sharded by Timestamp (quarterly).
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.DateSharding.Entities.AuditLog">
+            <summary>
+            Audit log entity sharded by timestamp.
+            Uses daily partitioning for high-volume logging scenarios.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.Id">
+            <summary>
+            Unique log entry identifier.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.Timestamp">
+            <summary>
+            Timestamp - SHARD KEY.
+            Used to route to daily tables.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.UserId">
+            <summary>
+            User who performed the action.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.Action">
+            <summary>
+            Action performed.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.EntityType">
+            <summary>
+            Entity type affected.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.EntityId">
+            <summary>
+            Entity ID affected.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.OldValues">
+            <summary>
+            Old values (JSON).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.NewValues">
+            <summary>
+            New values (JSON).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.IpAddress">
+            <summary>
+            IP address of the client.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.UserAgent">
+            <summary>
+            User agent string.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.AuditLog.CorrelationId">
+            <summary>
+            Correlation ID for request tracing.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.DateSharding.Entities.MetricDataPoint">
+            <summary>
+            Metric data point sharded by timestamp.
+            Uses hourly partitioning for time-series metrics.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.MetricDataPoint.Id">
+            <summary>
+            Unique data point identifier.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.MetricDataPoint.MetricName">
+            <summary>
+            Metric name/key.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.MetricDataPoint.Timestamp">
+            <summary>
+            Timestamp - SHARD KEY.
+            Used to route to time-based partitions.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.MetricDataPoint.Value">
+            <summary>
+            Numeric value.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.MetricDataPoint.Tags">
+            <summary>
+            Tags for filtering (JSON).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.MetricDataPoint.Source">
+            <summary>
+            Source system.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.MetricDataPoint.Unit">
+            <summary>
+            Unit of measurement.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.DateSharding.Entities.Transaction">
+            <summary>
+            Transaction entity sharded by TransactionDate.
+            Data is partitioned by month for efficient time-range queries.
+            </summary>
+            <example>
+            <code>
+            // Transactions are automatically routed to monthly tables:
+            // - Transactions_2024_01 for January 2024
+            // - Transactions_2024_02 for February 2024
+            // - etc.
+            </code>
+            </example>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.Id">
+            <summary>
+            Unique transaction identifier.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.TransactionRef">
+            <summary>
+            Transaction reference number.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.AccountNumber">
+            <summary>
+            Account number.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.TransactionDate">
+            <summary>
+            Transaction date - SHARD KEY.
+            Used to determine which monthly table stores this transaction.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.Amount">
+            <summary>
+            Transaction amount (positive for credits, negative for debits).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.Type">
+            <summary>
+            Transaction type.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.Description">
+            <summary>
+            Transaction description.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.Category">
+            <summary>
+            Category for reporting.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.Merchant">
+            <summary>
+            Merchant or counterparty name.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.BalanceAfter">
+            <summary>
+            Running balance after this transaction.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.DateSharding.Entities.Transaction.CreatedAt">
+            <summary>
+            When the transaction was created in the system.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.DateSharding.Entities.TransactionType">
+            <summary>
+            Transaction type enumeration.
+            </summary>
+        </member>
+    </members>
+</doc>

@@ -1,0 +1,290 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Dtde.Samples.RegionSharding</name>
+    </assembly>
+    <members>
+        <member name="T:Dtde.Samples.RegionSharding.Controllers.CustomersController">
+            <summary>
+            API controller demonstrating region-based sharding queries.
+            Shows how to query data from specific regions or across all regions.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.CustomersController.GetAllCustomers">
+            <summary>
+            Get all customers across all regions (fan-out query).
+            DTDE automatically queries all region shards and merges results.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.CustomersController.GetCustomersByRegion(System.String)">
+            <summary>
+            Get customers from a specific region (targeted query).
+            DTDE routes this query to only the relevant shard.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.CustomersController.GetCustomer(System.Int32)">
+            <summary>
+            Get a specific customer by ID.
+            Note: Without region context, this may query all shards.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.CustomersController.GetCustomerWithRegion(System.Int32,System.String)">
+            <summary>
+            Get customer by ID with region hint (optimized single-shard query).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.CustomersController.CreateCustomer(Dtde.Samples.RegionSharding.Controllers.CreateCustomerRequest)">
+            <summary>
+            Create a new customer in a specific region.
+            DTDE routes the insert to the correct shard based on Region.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.CustomersController.GetStatsByRegion">
+            <summary>
+            Get customer count per region (demonstrates aggregation across shards).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.CustomersController.SearchCustomers(System.String,System.String,System.String,System.Nullable{Dtde.Samples.RegionSharding.Entities.CustomerTier})">
+            <summary>
+            Search customers across all regions.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.RegionSharding.Controllers.OrdersController">
+            <summary>
+            API controller demonstrating cross-region order queries.
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.OrdersController.GetOrdersByRegion(System.String,System.Nullable{System.DateTime},System.Nullable{System.DateTime})">
+            <summary>
+            Get orders for a specific region (targeted query).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.OrdersController.GetOrdersByCustomer(System.Int32,System.String)">
+            <summary>
+            Get orders for a specific customer (uses customer's region for routing).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.OrdersController.CreateOrder(Dtde.Samples.RegionSharding.Controllers.CreateOrderRequest)">
+            <summary>
+            Create a new order (region is inherited from customer).
+            </summary>
+        </member>
+        <member name="M:Dtde.Samples.RegionSharding.Controllers.OrdersController.GetOrderStats">
+            <summary>
+            Get order statistics across all regions.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.RegionSharding.Data.RegionShardingDbContext">
+            <summary>
+            DbContext demonstrating region-based table sharding.
+            
+            This context routes entities to different tables based on the Region property:
+            - Customers_EU, Customers_US, Customers_APAC
+            - Orders_EU, Orders_US, Orders_APAC
+            - OrderItems_EU, OrderItems_US, OrderItems_APAC
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Data.RegionShardingDbContext.Customers">
+            <summary>
+            Customers - sharded by Region.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Data.RegionShardingDbContext.Orders">
+            <summary>
+            Orders - sharded by Region (denormalized from Customer).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Data.RegionShardingDbContext.OrderItems">
+            <summary>
+            Order items - sharded by Region.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.RegionSharding.Entities.Customer">
+            <summary>
+            Customer entity sharded by Region.
+            Each region (EU, US, APAC) has its own table in the database.
+            </summary>
+            <example>
+            <code>
+            // Customers are automatically routed to region-specific tables:
+            // - Customers_EU for Region = "EU"
+            // - Customers_US for Region = "US"  
+            // - Customers_APAC for Region = "APAC"
+            </code>
+            </example>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.Id">
+            <summary>
+            Unique customer identifier.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.Name">
+            <summary>
+            Customer name.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.Email">
+            <summary>
+            Customer email address.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.Region">
+            <summary>
+            Region code - SHARD KEY.
+            Used to determine which table stores this customer.
+            Valid values: EU, US, APAC
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.Phone">
+            <summary>
+            Optional phone number.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.Address">
+            <summary>
+            Customer address.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.Tier">
+            <summary>
+            Customer tier for business classification.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.CreatedAt">
+            <summary>
+            When the customer was created.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.UpdatedAt">
+            <summary>
+            Last update timestamp.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Customer.Orders">
+            <summary>
+            Navigation property to orders.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.RegionSharding.Entities.CustomerTier">
+            <summary>
+            Customer tier classification.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.RegionSharding.Entities.Order">
+            <summary>
+            Order entity - follows the same region sharding as Customer.
+            Orders are sharded based on the customer's region.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.Id">
+            <summary>
+            Unique order identifier.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.OrderNumber">
+            <summary>
+            Order number for display.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.CustomerId">
+            <summary>
+            Foreign key to Customer.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.Region">
+            <summary>
+            Region code - SHARD KEY (denormalized from Customer for routing).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.OrderDate">
+            <summary>
+            Order date.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.TotalAmount">
+            <summary>
+            Total amount.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.Status">
+            <summary>
+            Order status.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.Currency">
+            <summary>
+            Currency code (EUR for EU, USD for US, etc.).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.ShippingAddress">
+            <summary>
+            Shipping address.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.Customer">
+            <summary>
+            Navigation property to Customer.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.Order.Items">
+            <summary>
+            Order line items.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.RegionSharding.Entities.OrderStatus">
+            <summary>
+            Order status enumeration.
+            </summary>
+        </member>
+        <member name="T:Dtde.Samples.RegionSharding.Entities.OrderItem">
+            <summary>
+            Order line item - follows the order's region sharding.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.Id">
+            <summary>
+            Unique item identifier.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.OrderId">
+            <summary>
+            Foreign key to Order.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.Region">
+            <summary>
+            Region code - SHARD KEY (denormalized for routing).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.ProductSku">
+            <summary>
+            Product SKU.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.ProductName">
+            <summary>
+            Product name.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.Quantity">
+            <summary>
+            Quantity ordered.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.UnitPrice">
+            <summary>
+            Unit price at time of order.
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.LineTotal">
+            <summary>
+            Line total (Quantity * UnitPrice).
+            </summary>
+        </member>
+        <member name="P:Dtde.Samples.RegionSharding.Entities.OrderItem.Order">
+            <summary>
+            Navigation property to Order.
+            </summary>
+        </member>
+    </members>
+</doc>

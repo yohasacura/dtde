@@ -1,0 +1,23 @@
+<Project>
+  <!-- Inherit from parent Directory.Build.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!--
+      Disable opinionated code analysis warnings for sample projects.
+      Samples prioritize readability and simplicity over strict compliance.
+    -->
+    <NoWarn>$(NoWarn);CA1062;CA1848;CA2007;CA1002;CA2227;CA1304;CA1311;CA1851;CA1860;CA1862;CA1845</NoWarn>
+    <!--
+      CA1062 - Validate arguments of public methods (samples use simplified code)
+      CA1848 - Use LoggerMessage delegates (samples use simple ILogger calls for clarity)
+      CA2007 - ConfigureAwait (not needed in application code with no library consumers)
+      CA1002 - Do not expose generic lists (samples use List<T> for simplicity)
+      CA2227 - Collection properties should be read only (samples use simple DTOs)
+      CA1304 - Specify CultureInfo (samples use default culture for simplicity)
+      CA1311 - Specify a culture for string conversion (samples use default)
+      CA1862 - Use StringComparison overloads (samples use simple comparisons)
+      CA1845 - Use span-based string.Concat (samples prioritize readability)
+    -->
+  </PropertyGroup>
+</Project>

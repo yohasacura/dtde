@@ -1,0 +1,95 @@
+name: NuGet Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SemVer version (e.g. 1.2.3)"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  pack_and_push:
+    name: Pack & Push
+    runs-on: ubuntu-latest
+
+    env:
+      NUGET_SOURCE: https://api.nuget.org/v3/index.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+          cache: true
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "Version is empty" >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: dotnet restore ./Dtde.sln
+
+      - name: Pack
+        shell: bash
+        run: |
+          mkdir -p artifacts
+
+          dotnet pack ./src/Dtde.Abstractions/Dtde.Abstractions.csproj \
+            -c Release \
+            -o ./artifacts \
+            /p:ContinuousIntegrationBuild=true \
+            /p:Version=${{ steps.version.outputs.version }} \
+            /p:PackageVersion=${{ steps.version.outputs.version }}
+
+          dotnet pack ./src/Dtde.Core/Dtde.Core.csproj \
+            -c Release \
+            -o ./artifacts \
+            /p:ContinuousIntegrationBuild=true \
+            /p:Version=${{ steps.version.outputs.version }} \
+            /p:PackageVersion=${{ steps.version.outputs.version }}
+
+          dotnet pack ./src/Dtde.EntityFramework/Dtde.EntityFramework.csproj \
+            -c Release \
+            -o ./artifacts \
+            /p:ContinuousIntegrationBuild=true \
+            /p:Version=${{ steps.version.outputs.version }} \
+            /p:PackageVersion=${{ steps.version.outputs.version }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/*.nupkg
+          if-no-files-found: error
+
+      - name: Push to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push "artifacts/*.nupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source "$NUGET_SOURCE" \
+            --skip-duplicate

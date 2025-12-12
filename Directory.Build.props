@@ -1,0 +1,44 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Don't treat analyzer warnings as errors - they're handled via EditorConfig -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CA1002;CA1032;CA1062;CA1304;CA1305;CA1310;CA1311;CA1707;CA1805;CA1822;CA1826;CA1829;CA1845;CA1848;CA1851;CA1852;CA1859;CA1860;CA1862;CA1869;CA2007;CA2225;CA2227</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <!-- NuGet Audit - Vulnerability scanning on restore -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+  </PropertyGroup>
+
+  <!-- .NET Security Analyzers -->
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Authors>DTDE Contributors</Authors>
+    <Company>DTDE</Company>
+    <Product>Distributed Temporal Data Engine</Product>
+    <Copyright>Copyright © 2024 DTDE Contributors</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/yohasacura/dtde</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/yohasacura/dtde</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <PackageVersion>1.0.0</PackageVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+  </PropertyGroup>
+</Project>

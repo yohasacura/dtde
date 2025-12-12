@@ -1,0 +1,80 @@
+name: Bug report
+description: Report a defect in DTDE
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please provide enough detail to reproduce.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps/code to reproduce.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: dtde_version
+    attributes:
+      label: DTDE package version
+      placeholder: e.g. 1.0.0
+    validations:
+      required: false
+
+  - type: input
+    id: dotnet_version
+    attributes:
+      label: .NET SDK/runtime version
+      placeholder: e.g. 9.0.x
+    validations:
+      required: false
+
+  - type: dropdown
+    id: db_provider
+    attributes:
+      label: Database provider
+      options:
+        - SQL Server
+        - PostgreSQL
+        - SQLite
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: Paste relevant logs. Remove secrets.
+      render: text
+    validations:
+      required: false

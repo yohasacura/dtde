@@ -1,0 +1,138 @@
+### DTDE Region Sharding API Tests
+### This file tests property-based sharding by region (EU, US, APAC)
+
+@baseUrl = http://localhost:5000
+
+### ============================================
+### CUSTOMERS - Sharded by Region
+### ============================================
+
+### Create EU Customer
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+
+{
+  "name": "Hans Mueller",
+  "email": "hans@example.de",
+  "region": "EU",
+  "phone": "+49 123 456789",
+  "address": "Berlin, Germany"
+}
+
+###
+
+### Create US Customer
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+
+{
+  "name": "John Smith",
+  "email": "john@example.com",
+  "region": "US",
+  "phone": "+1 555 123 4567",
+  "address": "New York, USA"
+}
+
+###
+
+### Create APAC Customer
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+
+{
+  "name": "Tanaka Yuki",
+  "email": "tanaka@example.jp",
+  "region": "APAC",
+  "phone": "+81 3 1234 5678",
+  "address": "Tokyo, Japan"
+}
+
+###
+
+### Get all customers
+GET {{baseUrl}}/api/customers
+
+###
+
+### Get customers by region (EU)
+GET {{baseUrl}}/api/customers?region=EU
+
+###
+
+### Get customers by region (US)
+GET {{baseUrl}}/api/customers?region=US
+
+###
+
+### Get customer by ID
+GET {{baseUrl}}/api/customers/1
+
+###
+
+### ============================================
+### ORDERS - Sharded by Region (co-located)
+### ============================================
+
+### Create order for EU customer (customer 1)
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 1,
+  "shippingAddress": "Berlin, Germany",
+  "items": [
+    {
+      "productSku": "LAPTOP-001",
+      "productName": "Gaming Laptop",
+      "quantity": 1,
+      "unitPrice": 1299.99
+    },
+    {
+      "productSku": "MOUSE-001",
+      "productName": "Wireless Mouse",
+      "quantity": 2,
+      "unitPrice": 49.99
+    }
+  ]
+}
+
+###
+
+### Create order for US customer (customer 2)
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 2,
+  "shippingAddress": "New York, USA",
+  "items": [
+    {
+      "productSku": "PHONE-001",
+      "productName": "Smartphone Pro",
+      "quantity": 1,
+      "unitPrice": 999.99
+    }
+  ]
+}
+
+###
+
+### Get orders by region (EU)
+GET {{baseUrl}}/api/orders/region/EU
+
+###
+
+### Get orders for customer
+GET {{baseUrl}}/api/orders/customer/1
+
+###
+
+### Get order statistics
+GET {{baseUrl}}/api/orders/stats
+
+###
+
+### Get orders by region (US)
+GET {{baseUrl}}/api/orders/region/US
+
+###

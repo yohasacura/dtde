@@ -1,0 +1,207 @@
+### DTDE Hash Sharding API Tests
+### This file tests hash-based sharding for even distribution
+
+@baseUrl = http://localhost:5002
+
+### ============================================
+### USER PROFILES - Sharded by UserId Hash
+### ============================================
+
+### Create user profile 1
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "userId": "user-alpha-001",
+  "email": "alice@example.com",
+  "displayName": "Alice Johnson",
+  "firstName": "Alice",
+  "lastName": "Johnson",
+  "avatarUrl": "https://example.com/avatars/alice.png",
+  "timezone": "America/New_York",
+  "locale": "en-US"
+}
+
+###
+
+### Create user profile 2
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "userId": "user-beta-002",
+  "email": "bob@example.com",
+  "displayName": "Bob Smith",
+  "firstName": "Bob",
+  "lastName": "Smith",
+  "avatarUrl": "https://example.com/avatars/bob.png",
+  "timezone": "Europe/London",
+  "locale": "en-GB"
+}
+
+###
+
+### Create user profile 3
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "userId": "user-gamma-003",
+  "email": "charlie@example.com",
+  "displayName": "Charlie Brown",
+  "firstName": "Charlie",
+  "lastName": "Brown",
+  "timezone": "Asia/Tokyo",
+  "locale": "ja-JP"
+}
+
+###
+
+### Get all users
+GET {{baseUrl}}/api/users
+
+###
+
+### Get user by ID
+GET {{baseUrl}}/api/users/user-alpha-001
+
+###
+
+### Search users by email
+GET {{baseUrl}}/api/users?email=alice@example.com
+
+###
+
+### Update user profile
+PUT {{baseUrl}}/api/users/user-alpha-001
+Content-Type: application/json
+
+{
+  "displayName": "Alice J.",
+  "timezone": "America/Los_Angeles"
+}
+
+###
+
+### ============================================
+### USER SESSIONS - Sharded by UserId Hash
+### ============================================
+
+### Create session for user 1
+POST {{baseUrl}}/api/sessions
+Content-Type: application/json
+
+{
+  "userId": "user-alpha-001",
+  "deviceType": "Desktop",
+  "ipAddress": "192.168.1.100",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+}
+
+###
+
+### Create session for user 2
+POST {{baseUrl}}/api/sessions
+Content-Type: application/json
+
+{
+  "userId": "user-beta-002",
+  "deviceType": "Mobile",
+  "ipAddress": "10.0.0.50",
+  "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)"
+}
+
+###
+
+### Get sessions for user
+GET {{baseUrl}}/api/sessions/user/user-alpha-001
+
+###
+
+### Validate session token (use actual token from create response)
+GET {{baseUrl}}/api/sessions/validate/{sessionToken}
+
+###
+
+### Session statistics
+GET {{baseUrl}}/api/sessions/stats
+
+###
+
+### ============================================
+### USER ACTIVITY - Sharded by UserId Hash
+### ============================================
+
+### Record user activity
+POST {{baseUrl}}/api/users/user-alpha-001/activity
+Content-Type: application/json
+
+{
+  "activityType": "PageView",
+  "resourceType": "Dashboard",
+  "resourceId": "dashboard-main",
+  "metadata": "{\"page\": \"/home\", \"duration\": 120}"
+}
+
+###
+
+### Record another activity
+POST {{baseUrl}}/api/users/user-alpha-001/activity
+Content-Type: application/json
+
+{
+  "activityType": "ButtonClick",
+  "resourceType": "Report",
+  "resourceId": "report-export-btn",
+  "metadata": "{\"reportId\": \"rpt-123\"}"
+}
+
+###
+
+### Get user activity
+GET {{baseUrl}}/api/users/user-alpha-001/activity?limit=10
+
+###
+
+### Get user with sessions and activity
+GET {{baseUrl}}/api/users/user-alpha-001/full
+
+###
+
+### ============================================
+### SHARD DISTRIBUTION TEST
+### ============================================
+
+### Create multiple users to test distribution
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "userId": "user-delta-004",
+  "email": "david@example.com",
+  "displayName": "David Wilson"
+}
+
+###
+
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "userId": "user-epsilon-005",
+  "email": "eve@example.com",
+  "displayName": "Eve Martinez"
+}
+
+###
+
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "userId": "user-zeta-006",
+  "email": "frank@example.com",
+  "displayName": "Frank Lee"
+}
+
+###

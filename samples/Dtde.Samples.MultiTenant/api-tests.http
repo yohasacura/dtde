@@ -1,0 +1,171 @@
+### DTDE Multi-Tenant Sharding API Tests
+### This file tests tenant-based sharding for SaaS applications
+
+@baseUrl = http://localhost:5003
+
+### ============================================
+### TENANT MANAGEMENT (Admin API)
+### ============================================
+
+### Get all tenants
+GET {{baseUrl}}/api/admin/tenants
+
+###
+
+### Get tenant by ID
+GET {{baseUrl}}/api/admin/tenants/acme-corp
+
+###
+
+### Create new tenant
+POST {{baseUrl}}/api/admin/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "newco-ltd",
+  "name": "NewCo Limited",
+  "plan": "Basic",
+  "domain": "newco.example.com"
+}
+
+###
+
+### ============================================
+### PROJECTS - Sharded by TenantId
+### Tenant ID is part of the URL path
+### ============================================
+
+### Create project for Acme Corp
+POST {{baseUrl}}/api/tenant/acme-corp/projects
+Content-Type: application/json
+
+{
+  "name": "Website Redesign",
+  "description": "Complete overhaul of company website"
+}
+
+###
+
+### Create another project for Acme Corp
+POST {{baseUrl}}/api/tenant/acme-corp/projects
+Content-Type: application/json
+
+{
+  "name": "Mobile App",
+  "description": "iOS and Android app development"
+}
+
+###
+
+### Create project for Globex Inc
+POST {{baseUrl}}/api/tenant/globex-inc/projects
+Content-Type: application/json
+
+{
+  "name": "ERP Integration",
+  "description": "Integrate with SAP ERP system"
+}
+
+###
+
+### Get projects for Acme Corp
+GET {{baseUrl}}/api/tenant/acme-corp/projects
+
+###
+
+### Get projects for Globex Inc (different tenant)
+GET {{baseUrl}}/api/tenant/globex-inc/projects
+
+###
+
+### Get project by ID
+GET {{baseUrl}}/api/tenant/acme-corp/projects/1
+
+###
+
+### ============================================
+### TASKS - Sharded by TenantId (co-located)
+### ============================================
+
+### Create task for Acme Corp project
+POST {{baseUrl}}/api/tenant/acme-corp/tasks
+Content-Type: application/json
+
+{
+  "projectId": 1,
+  "title": "Design mockups",
+  "description": "Create initial design mockups for homepage",
+  "priority": "High",
+  "assigneeId": "user-003"
+}
+
+###
+
+### Create another task
+POST {{baseUrl}}/api/tenant/acme-corp/tasks
+Content-Type: application/json
+
+{
+  "projectId": 1,
+  "title": "Backend API development",
+  "description": "Develop REST APIs for new features",
+  "priority": "Medium",
+  "assigneeId": "user-004"
+}
+
+###
+
+### Get tasks for tenant
+GET {{baseUrl}}/api/tenant/acme-corp/tasks
+
+###
+
+### Get task by ID
+GET {{baseUrl}}/api/tenant/acme-corp/tasks/1
+
+###
+
+### Get task board for project
+GET {{baseUrl}}/api/tenant/acme-corp/tasks/board/1
+
+###
+
+### ============================================
+### TASK COMMENTS - Sharded by TenantId
+### ============================================
+
+### Add comment to task
+POST {{baseUrl}}/api/tenant/acme-corp/tasks/1/comments
+Content-Type: application/json
+
+{
+  "authorId": "user-003",
+  "content": "Mockups are ready for review. Please check the attached Figma link."
+}
+
+###
+
+### Add another comment
+POST {{baseUrl}}/api/tenant/acme-corp/tasks/1/comments
+Content-Type: application/json
+
+{
+  "authorId": "user-001",
+  "content": "Great work! Approved with minor changes."
+}
+
+###
+
+### ============================================
+### CROSS-TENANT ISOLATION TEST
+### ============================================
+
+### Try to access Globex projects (separate from Acme)
+GET {{baseUrl}}/api/tenant/globex-inc/projects
+
+###
+
+### Try to access Initech projects (separate from Acme)
+GET {{baseUrl}}/api/tenant/initech-llc/projects
+
+###
