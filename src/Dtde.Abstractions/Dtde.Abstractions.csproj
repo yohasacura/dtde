@@ -4,6 +4,8 @@
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Description>DTDE Abstractions - Core interfaces and contracts for the Distributed Temporal Data Engine. Use this package to build custom implementations or extend DTDE functionality.</Description>
+    <PackageTags>temporal;sharding;entity-framework;ef-core;abstractions;interfaces;contracts</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

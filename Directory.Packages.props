@@ -94,4 +94,9 @@
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
   </ItemGroup>
 
+  <!-- Source Link - Best practice for NuGet packages -->
+  <ItemGroup Label="SourceLink">
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+  </ItemGroup>
+
 </Project>

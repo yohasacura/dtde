@@ -1,5 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>DTDE Entity Framework Core Integration - Seamlessly integrate horizontal sharding and temporal versioning into your EF Core applications. Supports transparent query routing, automatic data distribution, and point-in-time queries.</Description>
+    <PackageTags>temporal;sharding;entity-framework;ef-core;database;linq;orm;sql-server;sqlite</PackageTags>
+    <!-- CA2007: ConfigureAwait warnings are false positives on 'await using' disposal -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Dtde.Core\Dtde.Core.csproj" />
     <ProjectReference Include="..\Dtde.Abstractions\Dtde.Abstractions.csproj" />
@@ -9,13 +19,5 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <!-- CA2007: ConfigureAwait warnings are false positives on 'await using' disposal -->
-    <NoWarn>$(NoWarn);CA2007</NoWarn>
-  </PropertyGroup>
 
 </Project>

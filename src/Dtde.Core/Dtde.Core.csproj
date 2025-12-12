@@ -1,5 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>DTDE Core - Core implementations of the Distributed Temporal Data Engine including sharding strategies (hash, range, date-based), temporal versioning, and data distribution algorithms.</Description>
+    <PackageTags>temporal;sharding;hash-sharding;range-sharding;date-sharding;dotnet;distributed</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Dtde.Abstractions\Dtde.Abstractions.csproj" />
   </ItemGroup>
@@ -8,11 +16,5 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
 
 </Project>
