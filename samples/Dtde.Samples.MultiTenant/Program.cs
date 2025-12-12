@@ -10,34 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new()
-    {
-        Title = "DTDE Multi-Tenant Sharding Sample",
-        Version = "v1",
-        Description = """
-            Demonstrates multi-tenant sharding with complete data isolation.
-            
-            ## Multi-Tenant Architecture
-            - **Tenant-Based Sharding**: Each tenant's data is isolated via ShardBy(TenantId)
-            - **Data Isolation**: Complete tenant data separation
-            - **Scalability**: Sharding by TenantId enables horizontal scaling
-            - **Co-location**: Related entities (Project, Task, Comment) share same shard
-            
-            ## Tenant Resolution
-            - Via `X-Tenant-Id` header
-            - Via route parameter `/api/tenant/{tenantId}/...`
-            - Via query parameter `?tenantId=...`
-            
-            ## Example Tenants
-            - `acme-corp`: Enterprise tenant (US)
-            - `globex-inc`: Premium tenant (EU)
-            - `initech-llc`: Basic tenant (APAC)
-            """
-    });
-});
+builder.Services.AddOpenApi();
 
 // Register tenant context accessor
 builder.Services.AddScoped<ITenantContextAccessor, TenantContextAccessor>();
@@ -46,7 +19,7 @@ builder.Services.AddScoped<ITenantContextAccessor, TenantContextAccessor>();
 // Sharding is configured in OnModelCreating using ShardBy(e => e.TenantId)
 builder.Services.AddDtdeDbContext<MultiTenantDbContext>(
     dbOptions => dbOptions.UseSqlite(
-        builder.Configuration.GetConnectionString("DefaultConnection") 
+        builder.Configuration.GetConnectionString("DefaultConnection")
         ?? "Data Source=multitenant.db"),
     dtdeOptions =>
     {
@@ -59,8 +32,7 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();
