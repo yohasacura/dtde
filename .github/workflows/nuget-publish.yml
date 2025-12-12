@@ -19,7 +19,7 @@ jobs:
   pack_and_push:
     name: Pack & Push
     runs-on: ubuntu-latest
-    environment: release  # Optional: use GitHub environment for additional protection
+    environment: production  # NuGet Trusted Publishing environment
 
     env:
       NUGET_SOURCE: https://api.nuget.org/v3/index.json
@@ -93,8 +93,6 @@ jobs:
       - name: NuGet Trusted Publishing Login
         uses: nuget/login@v1
         id: nuget-login
-        with:
-          user: ${{ secrets.NUGET_USER }}  # Your nuget.org username (profile name), NOT email
 
       - name: Push to NuGet
         run: |
