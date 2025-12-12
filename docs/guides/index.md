@@ -32,10 +32,10 @@ Welcome to the **Distributed Temporal Data Engine (DTDE)** guides! This section 
 
 ## 📖 Related Documentation
 
-- [Wiki](../wiki/README.md) - Detailed API reference and architecture documentation
+- [Wiki](../wiki/index.md) - Detailed API reference and architecture documentation
 - [Development Plan](../development-plan/01-overview.md) - Technical design documents
-- [Samples](/samples/) - Complete working examples
+- [Samples](../../samples/) - Complete working examples
 
 ---
 
-[← Back to Documentation](../README.md) | [Start with Quickstart →](quickstart.md)
+[← Back to Documentation](../index.md) | [Start with Quickstart →](quickstart.md)

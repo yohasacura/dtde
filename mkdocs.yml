@@ -1,0 +1,175 @@
+# MkDocs Configuration for DTDE Documentation
+# https://www.mkdocs.org/
+
+site_name: DTDE - Distributed Temporal Data Engine
+site_description: Transparent horizontal sharding and temporal versioning for Entity Framework Core
+site_author: yohasacura
+site_url: https://yohasacura.github.io/dtde/
+
+# Repository
+repo_name: yohasacura/dtde
+repo_url: https://github.com/yohasacura/dtde
+edit_uri: edit/master/docs/
+
+# Copyright
+copyright: Copyright &copy; 2025 DTDE Contributors
+
+# Theme Configuration
+theme:
+  name: material
+  language: en
+
+  # Color palette
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  # Features
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+
+  # Icons
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/database-cog
+
+  # Font
+  font:
+    text: Roboto
+    code: Roboto Mono
+
+# Plugins
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  - minify:
+      minify_html: true
+
+# Extensions
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Page tree / Navigation
+nav:
+  - Home: index.md
+
+  - Getting Started:
+    - guides/index.md
+    - Quickstart (5 min): guides/quickstart.md
+    - Getting Started: guides/getting-started.md
+    - Migration Guide: guides/migration-guide.md
+
+  - Feature Guides:
+    - Sharding Guide: guides/sharding-guide.md
+    - Temporal Guide: guides/temporal-guide.md
+
+  - Reference:
+    - wiki/index.md
+    - Architecture: wiki/architecture.md
+    - API Reference: wiki/api-reference.md
+    - Configuration: wiki/configuration.md
+    - Classes Reference: wiki/classes-reference.md
+    - Troubleshooting: wiki/troubleshooting.md
+
+  - Development:
+    - development-plan/index.md
+    - Architecture: development-plan/00-revised-architecture.md
+    - Overview: development-plan/01-overview.md
+    - Sharding Strategies: development-plan/01a-sharding-strategies.md
+    - Temporal Versioning: development-plan/01b-temporal-versioning.md
+    - Core Domain Model: development-plan/02-core-domain-model.md
+    - EF Core Integration: development-plan/03-ef-core-integration.md
+    - Query Engine: development-plan/04-query-engine.md
+    - Update Engine: development-plan/05-update-engine.md
+    - Configuration API: development-plan/06-configuration-api.md
+    - Testing Strategy: development-plan/07-testing-strategy.md
+    - Implementation Phases: development-plan/08-implementation-phases.md
+
+# Extra configuration
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/yohasacura/dtde
+    - icon: material/package-variant
+      link: https://www.nuget.org/packages/Dtde.EntityFramework
+
+  generator: false
+
+  # Version provider (for future use)
+  # version:
+  #   provider: mike
+
+extra_css:
+  - stylesheets/extra.css
+
+# Watch directories for live reload
+watch:
+  - docs

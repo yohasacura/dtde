@@ -522,4 +522,4 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 ---
 
-[← Back to Wiki](README.md) | [Classes Reference →](classes-reference.md)
+[← Back to Wiki](index.md) | [Classes Reference →](classes-reference.md)

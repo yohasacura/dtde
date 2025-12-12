@@ -13,7 +13,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [1.0.0]
 
-### Added
+### Features
 
 - `Dtde.Abstractions` package
 - `Dtde.Core` package

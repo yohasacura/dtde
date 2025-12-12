@@ -453,4 +453,4 @@ var quarterlyTotals = await _context.AllVersions<Contract>()
 
 ---
 
-[← Back to Guides](README.md) | [Back to Sharding Guide](sharding-guide.md)
+[← Back to Guides](index.md) | [Back to Sharding Guide](sharding-guide.md)

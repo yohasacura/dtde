@@ -1,0 +1,51 @@
+/* DTDE Custom Styles */
+
+/* Hero section styling */
+.md-typeset h1 {
+  font-weight: 700;
+}
+
+/* Card grid for home page */
+.md-typeset .grid {
+  grid-gap: 1rem;
+}
+
+/* Code block styling */
+.md-typeset pre > code {
+  font-size: 0.85em;
+}
+
+/* Table improvements */
+.md-typeset table:not([class]) {
+  font-size: 0.85rem;
+}
+
+.md-typeset table:not([class]) th {
+  min-width: 5rem;
+}
+
+/* Admonition improvements */
+.md-typeset .admonition {
+  font-size: 0.85rem;
+}
+
+/* Navigation improvements */
+.md-nav__link {
+  font-size: 0.75rem;
+}
+
+/* Footer styling */
+.md-footer-meta {
+  background-color: var(--md-footer-bg-color--dark);
+}
+
+/* Tab styling */
+.md-typeset .tabbed-labels > label {
+  font-size: 0.75rem;
+}
+
+/* Search highlighting */
+.md-search-result mark {
+  background-color: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+}

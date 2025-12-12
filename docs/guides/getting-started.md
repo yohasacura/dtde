@@ -356,10 +356,10 @@ Now that you have DTDE set up, explore these advanced topics:
 - [API Reference](../wiki/api-reference.md) - Complete API documentation
 
 ### Explore Examples
-- [Hash Sharding Sample](/samples/Dtde.Samples.HashSharding/) - Even distribution example
-- [Date Sharding Sample](/samples/Dtde.Samples.DateSharding/) - Time-based sharding
-- [Region Sharding Sample](/samples/Dtde.Samples.RegionSharding/) - Geographic sharding
-- [Multi-Tenant Sample](/samples/Dtde.Samples.MultiTenant/) - SaaS multi-tenancy
+- [Hash Sharding Sample](../../samples/Dtde.Samples.HashSharding/) - Even distribution example
+- [Date Sharding Sample](../../samples/Dtde.Samples.DateSharding/) - Time-based sharding
+- [Region Sharding Sample](../../samples/Dtde.Samples.RegionSharding/) - Geographic sharding
+- [Multi-Tenant Sample](../../samples/Dtde.Samples.MultiTenant/) - SaaS multi-tenancy
 
 ---
 
@@ -385,4 +385,4 @@ For more help, see the [Troubleshooting Guide](../wiki/troubleshooting.md).
 
 ---
 
-[← Back to Guides](README.md) | [Next: Sharding Guide →](sharding-guide.md)
+[← Back to Guides](index.md) | [Next: Sharding Guide →](sharding-guide.md)

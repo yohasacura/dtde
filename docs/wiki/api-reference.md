@@ -646,4 +646,4 @@ public enum VersioningMode
 
 ---
 
-[← Back to Wiki](README.md) | [Configuration →](configuration.md)
+[← Back to Wiki](index.md) | [Configuration →](configuration.md)

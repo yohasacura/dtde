@@ -514,4 +514,4 @@ When reporting issues, include:
 
 ---
 
-[← Back to Wiki](README.md) | [Back to API Reference](api-reference.md)
+[← Back to Wiki](index.md) | [Back to API Reference](api-reference.md)

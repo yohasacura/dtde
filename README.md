@@ -1,51 +1,80 @@
+<div align="center">
+
 # DTDE - Distributed Temporal Data Engine
 
-[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
-[![EF Core](https://img.shields.io/badge/EF%20Core-9.0-512BD4)](https://docs.microsoft.com/ef/core/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+**Transparent horizontal sharding and temporal versioning for Entity Framework Core**
 
-A powerful, property-agnostic temporal data engine for .NET applications with Entity Framework Core integration and horizontal sharding support.
+[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
+[![EF Core](https://img.shields.io/badge/EF%20Core-9.0-512BD4?style=flat-square)](https://docs.microsoft.com/ef/core/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-101%20passing-success?style=flat-square)](tests/)
+[![GitHub](https://img.shields.io/badge/GitHub-yohasacura%2Fdtde-181717?style=flat-square&logo=github)](https://github.com/yohasacura/dtde)
 
-## 🚀 Features
+[📚 Documentation](https://yohasacura.github.io/dtde/) · [🚀 Quick Start](#-quick-start) · [💡 Samples](samples/) · [📊 Benchmarks](#-performance-benchmarks)
 
-- **Temporal Versioning** - Track entity changes over time with configurable validity periods
-- **Property-Agnostic** - Use any DateTime properties as temporal boundaries (not limited to `ValidFrom`/`ValidTo`)
-- **Point-in-Time Queries** - Query data as it existed at any moment in time
-- **Version History** - Access complete change history for any entity
-- **Horizontal Sharding** - Distribute data across multiple databases for scalability
-- **Multiple Sharding Strategies** - Date-range, hash-based, or composite sharding
-- **Fluent Configuration API** - Intuitive builder pattern for configuration
-- **EF Core Integration** - Seamless integration with Entity Framework Core 9.0
-- **Hot/Warm/Cold Tiering** - Support for data tiering across storage tiers
+</div>
+
+---
+
+## Overview
+
+**DTDE** is a NuGet package that adds **transparent horizontal sharding** and **optional temporal versioning** to Entity Framework Core applications. Write standard LINQ queries — DTDE handles data distribution, query routing, and result merging automatically.
+
+```csharp
+// Standard EF Core LINQ - DTDE routes queries transparently
+var euCustomers = await db.Customers
+    .Where(c => c.Region == "EU")
+    .ToListAsync();  // Automatically queries only EU shard
+
+// Point-in-time queries for temporal entities
+var ordersLastMonth = await db.ValidAt<Order>(DateTime.Today.AddMonths(-1))
+    .Where(o => o.Status == "Completed")
+    .ToListAsync();
+```
+
+---
+
+## ✨ Key Features
+
+| Feature | Description |
+|---------|-------------|
+| 🔀 **Transparent Sharding** | Distribute data across tables or databases invisibly |
+| ⏱️ **Temporal Versioning** | Track entity history with point-in-time queries |
+| 🎯 **Property Agnostic** | Use ANY property names for sharding keys and temporal boundaries |
+| 📝 **EF Core Native** | Works with standard LINQ — no special query syntax required |
+| ⚡ **Multiple Strategies** | Date-based, hash-based, range-based, or composite sharding |
+| 🗄️ **Hot/Warm/Cold Tiers** | Support for data tiering across storage tiers |
+| ✅ **Fully Tested** | 100+ unit and integration tests |
+
+---
 
 ## 📦 Installation
 
 ```bash
-# Core abstractions
-dotnet add package Dtde.Abstractions
-
-# Core implementations
-dotnet add package Dtde.Core
-
-# EF Core integration
+# All-in-one package (recommended)
 dotnet add package Dtde.EntityFramework
+
+# Or install individual packages
+dotnet add package Dtde.Abstractions  # Core interfaces
+dotnet add package Dtde.Core          # Core implementations
+dotnet add package Dtde.EntityFramework  # EF Core integration
 ```
 
-## 🏁 Quick Start
+**Requirements:** .NET 9.0+, Entity Framework Core 9.0+
 
-### 1. Define Your Temporal Entity
+---
+
+## 🚀 Quick Start
+
+### 1. Define Your Entity
 
 ```csharp
-public class Contract
+public class Customer
 {
     public int Id { get; set; }
-    public string ContractNumber { get; set; } = string.Empty;
-    public string CustomerName { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    
-    // Temporal properties - can be named anything!
-    public DateTime ValidFrom { get; set; }
-    public DateTime? ValidTo { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Region { get; set; } = string.Empty;  // Shard key
+    public DateTime CreatedAt { get; set; }
 }
 ```
 
@@ -54,171 +83,312 @@ public class Contract
 ```csharp
 public class AppDbContext : DtdeDbContext
 {
+    public DbSet<Customer> Customers => Set<Customer>();
+
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-    
-    public DbSet<Contract> Contracts => Set<Contract>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Customer>(entity =>
+        {
+            entity.ShardBy(c => c.Region);  // Enable sharding by Region
+        });
+    }
 }
 ```
 
 ### 3. Configure Services
 
 ```csharp
-builder.Services.AddDtdeDbContext<AppDbContext>(
-    dbOptions => dbOptions.UseSqlServer(connectionString),
-    dtdeOptions =>
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseSqlServer(connectionString);
+    options.UseDtde(dtde =>
     {
-        dtdeOptions.ConfigureEntity<Contract>(entity =>
-        {
-            entity.HasTemporalValidity(
-                validFrom: nameof(Contract.ValidFrom),
-                validTo: nameof(Contract.ValidTo));
-        });
+        dtde.AddShard(s => s.WithId("EU").WithShardKeyValue("EU").WithTier(ShardTier.Hot));
+        dtde.AddShard(s => s.WithId("US").WithShardKeyValue("US").WithTier(ShardTier.Hot));
+        dtde.AddShard(s => s.WithId("APAC").WithShardKeyValue("APAC").WithTier(ShardTier.Hot));
     });
+});
 ```
 
-### 4. Use Temporal Queries
+### 4. Use It!
 
 ```csharp
-public class ContractService
-{
-    private readonly AppDbContext _context;
+// Queries are automatically routed to correct shard(s)
+var allCustomers = await _context.Customers.ToListAsync();  // Queries all shards
+var euCustomers = await _context.Customers
+    .Where(c => c.Region == "EU")
+    .ToListAsync();  // Only queries EU shard
 
-    // Get current contracts
-    public async Task<List<Contract>> GetCurrentContracts()
-    {
-        return await _context.ValidAt<Contract>(DateTime.UtcNow).ToListAsync();
-    }
-
-    // Get contracts as they existed on a specific date
-    public async Task<List<Contract>> GetContractsAsOf(DateTime asOfDate)
-    {
-        return await _context.ValidAt<Contract>(asOfDate).ToListAsync();
-    }
-
-    // Get all versions of a contract
-    public async Task<List<Contract>> GetContractHistory(string contractNumber)
-    {
-        return await _context.AllVersions<Contract>()
-            .Where(c => c.ContractNumber == contractNumber)
-            .OrderBy(c => c.ValidFrom)
-            .ToListAsync();
-    }
-
-    // Create a new version of a contract
-    public async Task<Contract> UpdateContract(Contract current, Action<Contract> changes, DateTime effectiveDate)
-    {
-        var newVersion = _context.CreateNewVersion(current, changes, effectiveDate);
-        await _context.SaveChangesAsync();
-        return newVersion;
-    }
-}
+// Inserts are automatically routed based on shard key
+_context.Customers.Add(new Customer { Name = "Acme Corp", Region = "US" });  // Routes to US shard
+await _context.SaveChangesAsync();
 ```
 
-## 🔀 Mixed Usage: Temporal + Regular Entities
+---
 
-DTDE is designed to work seamlessly alongside regular EF Core entities in the same database. Only entities explicitly configured with `HasTemporalValidity()` get temporal behavior.
+## 🔀 Sharding Strategies
+
+DTDE supports multiple sharding strategies to match your data access patterns:
+
+### Property-Based Sharding
+
+Distribute data by a property value (region, tenant, category):
+
+```csharp
+modelBuilder.Entity<Customer>(entity =>
+{
+    entity.ShardBy(c => c.Region);
+});
+```
+
+**Use cases:** Multi-region deployments, GDPR compliance, data residency
+
+### Date-Based Sharding
+
+Partition data by date for time-series workloads:
+
+```csharp
+modelBuilder.Entity<Transaction>(entity =>
+{
+    entity.ShardByDate(t => t.TransactionDate, DateInterval.Month);
+});
+```
+
+**Use cases:** Financial transactions, audit logs, metrics, event sourcing
+
+### Hash-Based Sharding
+
+Even distribution across shards using consistent hashing:
+
+```csharp
+modelBuilder.Entity<UserProfile>(entity =>
+{
+    entity.ShardByHash(u => u.UserId, shardCount: 8);
+});
+```
+
+**Use cases:** High-volume data, preventing hotspots, horizontal scaling
+
+### Composite Sharding
+
+Combine strategies for complex scenarios:
+
+```csharp
+modelBuilder.Entity<Order>(entity =>
+{
+    entity.ShardBy(o => o.Region)
+          .ThenByDate(o => o.OrderDate);
+});
+```
+
+---
+
+## ⏱️ Temporal Versioning
+
+Track entity history and query data at any point in time:
+
+### Enable Temporal Tracking
+
+```csharp
+modelBuilder.Entity<Contract>(entity =>
+{
+    entity.HasTemporalValidity(
+        validFrom: nameof(Contract.ValidFrom),
+        validTo: nameof(Contract.ValidTo));
+});
+```
+
+### Temporal Queries
+
+```csharp
+// Current data
+var current = await _context.ValidAt<Contract>(DateTime.UtcNow).ToListAsync();
+
+// Historical data (as of a specific date)
+var historical = await _context.ValidAt<Contract>(new DateTime(2024, 1, 1)).ToListAsync();
+
+// All versions (bypass temporal filtering)
+var allVersions = await _context.AllVersions<Contract>()
+    .Where(c => c.ContractNumber == "C-001")
+    .OrderBy(c => c.ValidFrom)
+    .ToListAsync();
+
+// Data within a date range
+var rangeData = await _context.ValidBetween<Contract>(startDate, endDate).ToListAsync();
+```
+
+### Temporal Operations
+
+```csharp
+// Add with effective date
+_context.AddTemporal(contract, effectiveFrom: DateTime.UtcNow);
+
+// Create new version (closes old, opens new)
+var newVersion = _context.CreateNewVersion(existing, changes, effectiveDate);
+
+// Terminate (close validity)
+_context.Terminate(contract, terminationDate: DateTime.UtcNow);
+
+await _context.SaveChangesAsync();
+```
+
+---
+
+## 🔄 Mixed Usage: Sharded + Regular Entities
+
+DTDE works seamlessly alongside regular EF Core entities:
 
 ```csharp
 public class AppDbContext : DtdeDbContext
 {
-    public DbSet<Contract> Contracts => Set<Contract>();      // Temporal entity
-    public DbSet<Customer> Customers => Set<Customer>();      // Regular entity
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();      // Regular entity
+    public DbSet<Customer> Customers => Set<Customer>();   // Sharded
+    public DbSet<Contract> Contracts => Set<Contract>();   // Temporal
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();   // Regular EF Core
 }
-
-// Only Contract is configured as temporal
-dtdeOptions.ConfigureEntity<Contract>(e => 
-    e.HasTemporalValidity("ValidFrom", "ValidTo"));
-// Customer and AuditLog work as standard EF Core entities
 ```
+
+| Entity Configuration | Behavior |
+|---------------------|----------|
+| `ShardBy()` configured | Queries routed by shard key |
+| `HasTemporalValidity()` configured | Temporal filtering applied |
+| No special configuration | Standard EF Core entity |
+| Direct `DbSet<T>` access | Bypasses DTDE filtering |
+
+---
+
+## 🗄️ Shard Tiers
+
+Organize shards by access frequency for cost optimization:
 
 ```csharp
-// TEMPORAL queries (DTDE filtering)
-var currentContracts = await _context.ValidAt<Contract>(DateTime.UtcNow).ToListAsync();
-var contractHistory = await _context.AllVersions<Contract>().ToListAsync();
+dtde.AddShard(s => s
+    .WithId("2024-current")
+    .WithTier(ShardTier.Hot)         // Frequently accessed, recent data
+    .WithConnectionString(fastStorage));
 
-// REGULAR EF queries (no temporal filtering)
-var customers = await _context.Customers.ToListAsync();
-var logs = await _context.AuditLogs.Where(l => l.Date > cutoff).ToListAsync();
-
-// Direct DbSet access bypasses temporal filtering
-var allContractRows = await _context.Contracts.ToListAsync();  // ALL rows
-var validContracts = await _context.ValidAt<Contract>(now).ToListAsync();  // Filtered
+dtde.AddShard(s => s
+    .WithId("2023-archive")
+    .WithTier(ShardTier.Cold)        // Archived, rarely accessed
+    .WithConnectionString(cheapStorage)
+    .AsReadOnly());                   // Prevent accidental writes
 ```
 
-| Scenario | Behavior |
-|----------|----------|
-| Entity NOT configured with `HasTemporalValidity()` | Standard EF Core entity |
-| `DbSet<T>` direct access | No temporal filtering |
-| `ValidAt<T>()` on non-temporal entity | Returns all rows |
-| `ValidAt<T>()` on temporal entity | Applies temporal predicate |
+| Tier | Description | Typical Storage |
+|------|-------------|-----------------|
+| `Hot` | Frequently accessed, recent data | SSD, Premium SQL |
+| `Warm` | Less frequently accessed | Standard SQL |
+| `Cold` | Archived, rarely accessed | Archive storage |
+| `Archive` | Long-term retention | Cold storage |
 
-## 📖 Documentation
+---
 
-### Temporal Queries
+## ⚙️ Configuration Options
 
-| Method | Description |
-|--------|-------------|
-| `ValidAt<T>(date)` | Returns entities valid at a specific point in time |
-| `ValidBetween<T>(start, end)` | Returns entities valid within a date range |
-| `AllVersions<T>()` | Returns all versions, bypassing temporal filtering |
-
-### Temporal Operations
-
-| Method | Description |
-|--------|-------------|
-| `AddTemporal<T>(entity, effectiveFrom)` | Adds a new entity with temporal tracking |
-| `CreateNewVersion<T>(entity, changes, effectiveDate)` | Creates a new version with changes |
-| `Terminate<T>(entity, terminationDate)` | Ends an entity's validity period |
-
-### Entity Configuration
+### Fluent API
 
 ```csharp
-// Configure with property names
-entity.HasTemporalValidity(
-    validFrom: "EffectiveDate",
-    validTo: "ExpirationDate");
+options.UseDtde(dtde =>
+{
+    // Entity configuration
+    dtde.ConfigureEntity<Order>(e => e.ShardByDate(o => o.OrderDate));
 
-// Configure with expressions (type-safe)
-entity.HasValidity(
-    validFromSelector: e => e.EffectiveDate,
-    validToSelector: e => e.ExpirationDate);
+    // Shard definitions
+    dtde.AddShard(s => s.WithId("primary").WithConnectionString("..."));
 
-// Configure primary key (auto-detected by convention)
-entity.HasKey(e => e.Id);
+    // Load from configuration file
+    dtde.AddShardsFromConfig("shards.json");
 
-// Configure sharding
-entity.WithSharding(new DateRangeShardingConfiguration(...));
+    // Default temporal context
+    dtde.SetDefaultTemporalContext(() => DateTime.UtcNow);
+
+    // Performance tuning
+    dtde.SetMaxParallelShards(10);
+
+    // Diagnostics
+    dtde.EnableDiagnostics();
+});
 ```
 
-### Sharding Configuration
+### JSON Configuration (shards.json)
 
-```csharp
-dtdeOptions.AddShard(new ShardMetadataBuilder()
-    .WithId("shard-2024")
-    .WithName("2024 Data")
-    .WithConnectionString("Server=...;Database=Data2024")
-    .WithTier(ShardTier.Hot)
-    .WithDateRange(new DateTime(2024, 1, 1), new DateTime(2024, 12, 31))
-    .Build());
-
-dtdeOptions.AddShard(new ShardMetadataBuilder()
-    .WithId("shard-archive")
-    .WithName("Archive Data")
-    .WithConnectionString("Server=...;Database=Archive")
-    .WithTier(ShardTier.Cold)
-    .AsReadOnly()
-    .Build());
+```json
+{
+  "shards": [
+    {
+      "shardId": "2024-q4",
+      "name": "Q4 2024 Data",
+      "connectionString": "Server=...;Database=Data2024Q4",
+      "tier": "Hot",
+      "dateRangeStart": "2024-10-01",
+      "dateRangeEnd": "2024-12-31",
+      "isReadOnly": false,
+      "priority": 100
+    },
+    {
+      "shardId": "2024-archive",
+      "name": "2024 Archive",
+      "connectionString": "Server=...;Database=Archive2024",
+      "tier": "Cold",
+      "isReadOnly": true,
+      "priority": 10
+    }
+  ]
+}
 ```
 
-### Shard Tiers
+---
 
-| Tier | Description |
-|------|-------------|
-| `Hot` | Frequently accessed, recent data |
-| `Warm` | Less frequently accessed data |
-| `Cold` | Archived, rarely accessed data |
-| `Archive` | Long-term storage |
+## 📊 Performance Benchmarks
+
+Comprehensive benchmarks comparing single table vs sharded approaches:
+
+### Test Environment
+
+| Component | Specification |
+|-----------|---------------|
+| **CPU** | 12th Gen Intel Core i9-12900H (14 cores, 20 threads) |
+| **Runtime** | .NET 9.0, RyuJIT AVX2 |
+| **Database** | SQLite (file-based, separate DBs per benchmark) |
+| **Framework** | BenchmarkDotNet 0.14.0 |
+
+### Key Results
+
+| Query Type | Records | Single Table | Sharded | Improvement |
+|------------|---------|-------------|---------|-------------|
+| **Point Lookup** | 100K | 143.9 ns | 146.5 ns | ~Same |
+| **Date Range (1 month)** | 100K | 16,103 µs | 3,596 µs | **4.5x faster** |
+| **Region Scan** | 100K | 3,659 µs | 1,786 µs | **2.0x faster** |
+| **Count** | 50K | 3,534 µs | 26.0 µs | **136x faster** |
+
+**Key insight:** Sharded queries benefit significantly from partition pruning — queries that target a specific shard key value only scan relevant partitions.
+
+### When to Use Sharding
+
+✅ **Good candidates:**
+- Large datasets (millions+ rows)
+- Time-series / temporal data
+- Multi-tenant applications
+- Geographic distribution requirements
+- High write throughput needs
+- Hot/cold data patterns
+
+⚠️ **Consider carefully:**
+- Small datasets (<100K rows)
+- Random access patterns
+- Complex cross-entity joins
+- Simple CRUD applications
+
+```bash
+# Run benchmarks
+cd benchmarks/Dtde.Benchmarks
+dotnet run -c Release
+```
+
+---
 
 ## 🏗️ Architecture
 
@@ -228,7 +398,7 @@ dtdeOptions.AddShard(new ShardMetadataBuilder()
 ├─────────────────────────────────────────────────────────────┤
 │                   Dtde.EntityFramework                       │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │ DtdeDbContext│  │Query Engine │  │   Update Engine     │  │
+│  │DtdeDbContext│  │Query Engine │  │   Update Engine     │  │
 │  │  - ValidAt  │  │ - Rewriter  │  │  - VersionManager   │  │
 │  │  - AllVersions│ │ - Executor  │  │  - ShardRouter     │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
@@ -244,224 +414,112 @@ dtdeOptions.AddShard(new ShardMetadataBuilder()
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 🧪 Testing
-
-```bash
-# Run all tests
-dotnet test
-
-# Run with coverage
-dotnet test --collect:"XPlat Code Coverage"
-```
+---
 
 ## 📁 Project Structure
 
 ```
-Dtde/
+dtde/
 ├── src/
-│   ├── Dtde.Abstractions/     # Core interfaces and contracts
-│   ├── Dtde.Core/             # Core implementations
-│   └── Dtde.EntityFramework/  # EF Core integration
+│   ├── Dtde.Abstractions/        # Core interfaces and contracts
+│   ├── Dtde.Core/                # Core implementations
+│   └── Dtde.EntityFramework/     # EF Core integration
 ├── tests/
-│   ├── Dtde.Core.Tests/       # Unit tests
+│   ├── Dtde.Core.Tests/          # Unit tests
 │   ├── Dtde.EntityFramework.Tests/
 │   └── Dtde.Integration.Tests/
-├── samples/
-│   └── Dtde.Sample.WebApi/    # Sample REST API
-└── docs/
-    └── development-plan/      # Design documentation
+├── samples/                       # Sample applications
+│   ├── Dtde.Sample.WebApi/       # Basic getting started
+│   ├── Dtde.Samples.RegionSharding/   # Property-based sharding
+│   ├── Dtde.Samples.DateSharding/     # Date-based sharding
+│   ├── Dtde.Samples.HashSharding/     # Hash-based sharding
+│   ├── Dtde.Samples.MultiTenant/      # Multi-tenancy
+│   └── Dtde.Samples.Combined/         # Mixed strategies
+├── benchmarks/
+│   └── Dtde.Benchmarks/          # Performance benchmarks
+└── docs/                         # Documentation (MkDocs)
 ```
 
-## 🔧 Configuration Options
+---
 
-### DtdeOptionsBuilder
+## 💡 Sample Projects
 
-```csharp
-services.AddDtde(options =>
-{
-    // Configure entities
-    options.ConfigureEntity<MyEntity>(e => e.HasTemporalValidity("StartDate", "EndDate"));
-    
-    // Add shards
-    options.AddShard(shard => shard.WithId("primary").WithConnectionString("..."));
-    
-    // Load shards from configuration
-    options.AddShardsFromConfig("shards.json");
-    
-    // Set default temporal context
-    options.SetDefaultTemporalContext(() => DateTime.UtcNow);
-    
-    // Performance tuning
-    options.SetMaxParallelShards(10);
-    
-    // Diagnostics
-    options.EnableDiagnostics();
-    
-    // Testing
-    options.EnableTestMode();
-});
+Explore working examples for each sharding strategy:
+
+| Sample | Strategy | Use Case |
+|--------|----------|----------|
+| [Dtde.Sample.WebApi](samples/Dtde.Sample.WebApi/) | Basic | Getting started |
+| [Dtde.Samples.RegionSharding](samples/Dtde.Samples.RegionSharding/) | Property-based | Multi-region data residency |
+| [Dtde.Samples.DateSharding](samples/Dtde.Samples.DateSharding/) | Date-based | Time-series, audit logs |
+| [Dtde.Samples.HashSharding](samples/Dtde.Samples.HashSharding/) | Hash-based | Even data distribution |
+| [Dtde.Samples.MultiTenant](samples/Dtde.Samples.MultiTenant/) | Tenant-based | SaaS multi-tenancy |
+| [Dtde.Samples.Combined](samples/Dtde.Samples.Combined/) | Mixed | Complex enterprise scenarios |
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run all tests (101 tests)
+dotnet test
+
+# Run with coverage
+dotnet test --collect:"XPlat Code Coverage"
+
+# Run specific test project
+dotnet test tests/Dtde.Core.Tests/
 ```
 
-### Shard Configuration File (shards.json)
+---
 
-```json
-{
-  "shards": [
-    {
-      "shardId": "shard-2024",
-      "name": "2024 Data",
-      "connectionString": "Server=...;Database=Data2024",
-      "tier": "Hot",
-      "dateRangeStart": "2024-01-01",
-      "dateRangeEnd": "2024-12-31",
-      "isReadOnly": false,
-      "priority": 100
-    }
-  ]
-}
-```
+## 📚 Documentation
+
+- **[Full Documentation](https://yohasacura.github.io/dtde/)** — Complete guides, API reference, and tutorials
+- **[Quick Start Guide](docs/guides/quickstart.md)** — Get running in 5 minutes
+- **[Sharding Guide](docs/guides/sharding-guide.md)** — Deep dive into sharding strategies
+- **[Temporal Guide](docs/guides/temporal-guide.md)** — Temporal versioning explained
+- **[API Reference](docs/wiki/api-reference.md)** — Complete API documentation
+- **[Architecture](docs/development-plan/00-revised-architecture.md)** — Design decisions and architecture
+
+---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📊 Performance Benchmarks
-
-Comprehensive benchmarks comparing single table vs sharded approaches across various query patterns.
-
-### Benchmark Setup
-
-#### Test Environment
-| Component | Specification |
-|-----------|---------------|
-| **CPU** | 12th Gen Intel Core i9-12900H (14 cores, 20 threads) |
-| **Runtime** | .NET 9.0.10, RyuJIT AVX2 |
-| **Database** | SQLite (file-based, separate DBs per benchmark) |
-| **Framework** | BenchmarkDotNet 0.14.0 |
-| **Warmup** | 2 iterations |
-| **Iterations** | 5 per benchmark |
-
-#### Data Configuration
-| Entity Type | Records | Description |
-|-------------|---------|-------------|
-| **Customers** | RecordCount / 10 | Base entities with Region sharding |
-| **Orders** | RecordCount / 5 | Date-range sharded by OrderDate |
-| **Transactions** | RecordCount | High-volume, date-partitioned data |
-
-#### Sharding Strategies Tested
-| Strategy | Entity | Shard Key |
-|----------|--------|-----------|
-| **ShardBy** | Customers | `Region` (US, EU, APAC, etc.) |
-| **ShardByDate** | Orders | `OrderDate` (monthly partitions) |
-| **ShardByHash** | Transactions | `TransactionDate` + hash distribution |
-
-#### How It Works
-- **Single Table:** All data in one SQLite database, standard EF Core queries
-- **Sharded:** Data distributed across logical partitions using DTDE's `.UseDtde()` extension
-- **Partition Pruning:** Sharded queries automatically target relevant partitions only
-
-### Key Results Summary
-
-#### 🎯 Point Lookups (Primary Key)
-| Records | Single Table | Sharded | Difference |
-|---------|-------------|---------|------------|
-| 10K | 121.6 ns | 125.7 ns | ~Same |
-| 50K | 135.2 ns | 134.6 ns | ~Same |
-| 100K | 143.9 ns | 146.5 ns | ~Same |
-
-**Insight:** Primary key lookups show nearly identical performance - sharding adds negligible overhead.
-
-#### 📅 Date Range Queries (Single Month)
-| Records | Single Table | Sharded | Improvement |
-|---------|-------------|---------|-------------|
-| 10K | 975 µs | 270 µs | **3.6x faster** |
-| 50K | 8,504 µs | 3,156 µs | **2.7x faster** |
-| 100K | 16,103 µs | 3,596 µs | **4.5x faster** |
-
-**Insight:** Sharded queries on date-partitioned data show significant speedups due to partition pruning.
-
-#### 🔍 Range Scans (Single Region)
-| Records | Single Table | Sharded | Improvement |
-|---------|-------------|---------|-------------|
-| 10K | 224 µs | 87 µs | **2.6x faster** |
-| 50K | 1,023 µs | 301 µs | **3.4x faster** |
-| 100K | 3,659 µs | 1,786 µs | **2.0x faster** |
-
-**Insight:** Region-based filtering benefits from shard locality.
-
-#### 📊 Count Operations
-| Records | Single Table | Sharded | Improvement |
-|---------|-------------|---------|-------------|
-| 10K | 24.6 µs | 18.8 µs | **1.3x faster** |
-| 50K | 3,534 µs | 26.0 µs | **136x faster** |
-| 100K | 7,667 µs | 1,460 µs | **5.3x faster** |
-
-**Insight:** Sharded count operations can be parallelized across partitions.
-
-### When to Use Sharding
-
-Horizontal sharding distributes data across multiple partitions (tables, files, or databases) based on a shard key. This architectural pattern provides benefits in specific scenarios:
-
-#### ✅ Good Candidates for Sharding
-
-| Scenario | Why Sharding Helps |
-|----------|-------------------|
-| **Large datasets (millions+ rows)** | Reduces per-partition data size, improving query performance |
-| **Time-series / temporal data** | Date-based partitioning enables efficient range queries and archival |
-| **Multi-tenant applications** | Tenant-based sharding provides data isolation and balanced load |
-| **Geographic distribution** | Region-based sharding reduces latency and meets data residency requirements |
-| **High write throughput** | Distributes write load across multiple partitions |
-| **Hot/Cold data patterns** | Enables tiered storage with recent data on fast storage |
-
-#### ⚠️ When Sharding May Not Help
-
-| Scenario | Consideration |
-|----------|--------------|
-| **Small datasets (<100K rows)** | Overhead may outweigh benefits |
-| **Random access patterns** | Cross-shard queries can be slower than single-table |
-| **Complex joins across entities** | Cross-shard joins require careful design |
-| **Simple CRUD applications** | Added complexity may not be justified |
-
-#### 🎯 Choosing a Sharding Strategy
-
-| Strategy | Best For | Example |
-|----------|----------|---------|
-| **Date-based** | Temporal data, logs, events | Partition by month/year |
-| **Hash-based** | Even distribution, no natural key | Distribute by hash(id) |
-| **Range-based** | Categorical data, regions | Partition by region/tenant |
-| **Composite** | Complex access patterns | Date + Region combined |
-
-### Running Benchmarks
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting PRs.
 
 ```bash
-cd benchmarks/Dtde.Benchmarks
-dotnet run -c Release
-
-# Run specific benchmark suite
-dotnet run -c Release -- --filter "*SingleVsSharded*"
-
-# Quick dry run
-dotnet run -c Release -- --filter "*PointLookup*" --job Dry
+# Clone and build
+git clone https://github.com/yohasacura/dtde.git
+cd dtde
+dotnet build
+dotnet test
 ```
 
+See also:
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
+---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+---
 
 ## 🙏 Acknowledgments
 
 - Built with [Entity Framework Core](https://docs.microsoft.com/ef/core/)
 - Inspired by temporal database concepts and bi-temporal data modeling
-- Designed for modern .NET applications
+- Benchmarked with [BenchmarkDotNet](https://benchmarkdotnet.org/)
 
 ---
 
+<div align="center">
+
 **Made with ❤️ for the .NET community**
+
+[⭐ Star on GitHub](https://github.com/yohasacura/dtde) · [🐛 Report Bug](https://github.com/yohasacura/dtde/issues) · [💬 Discussions](https://github.com/yohasacura/dtde/discussions)
+
+</div>

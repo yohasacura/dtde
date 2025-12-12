@@ -480,4 +480,4 @@ dtde.AddShard(s => s
 
 ---
 
-[← Back to Wiki](README.md) | [API Reference →](api-reference.md)
+[← Back to Wiki](index.md) | [API Reference →](api-reference.md)

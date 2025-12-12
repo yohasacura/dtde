@@ -143,4 +143,4 @@ See the [development plan](../development-plan/01-overview.md) for technical det
 
 ---
 
-[← Back to Documentation](../README.md) | [Architecture →](architecture.md)
+[← Back to Documentation](../index.md) | [Architecture →](architecture.md)

@@ -1,6 +1,6 @@
 # DTDE Development Plan - Implementation Phases
 
-[← Back to Testing Strategy](07-testing-strategy.md) | [Next: Appendices →](09-appendices.md)
+[← Back to Testing Strategy](07-testing-strategy.md)
 
 ---
 
@@ -70,7 +70,7 @@ Total: ~20 weeks (5 months)
 
 ```gherkin
 Feature: Sharding Configuration
-  
+
   Scenario: Configure entity with property-based sharding
     Given an entity type "Customer" with property "Region"
     When I configure sharding using ShardBy(c => c.Region)
@@ -557,4 +557,4 @@ Feature: Production Readiness
 
 ## Next Steps
 
-Continue to [09 - Appendices](09-appendices.md) for additional reference materials and diagrams.
+Return to the [Overview](01-overview.md) or explore the [Guides](../guides/index.md) for practical tutorials.

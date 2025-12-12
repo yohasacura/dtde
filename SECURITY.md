@@ -14,7 +14,7 @@ Please **do not** report security vulnerabilities through public GitHub issues.
 Preferred reporting method:
 
 - Open a private GitHub Security Advisory:
-  https://github.com/yohasacura/dtde/security/advisories/new
+  <https://github.com/yohasacura/dtde/security/advisories/new>
 
 If you cannot use GitHub Security Advisories, open a GitHub issue with minimal detail and clearly mark it as **SECURITY** (maintainers may ask you to move to a private channel).
 

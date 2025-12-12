@@ -485,4 +485,4 @@ dtde.AddShard(s => s
 
 ---
 
-[← Back to Guides](README.md) | [Next: Temporal Guide →](temporal-guide.md)
+[← Back to Guides](index.md) | [Next: Temporal Guide →](temporal-guide.md)

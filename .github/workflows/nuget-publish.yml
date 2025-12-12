@@ -13,11 +13,13 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # Required for NuGet Trusted Publishing (OIDC)
 
 jobs:
   pack_and_push:
     name: Pack & Push
     runs-on: ubuntu-latest
+    environment: release  # Optional: use GitHub environment for additional protection
 
     env:
       NUGET_SOURCE: https://api.nuget.org/v3/index.json
@@ -85,11 +87,16 @@ jobs:
           path: artifacts/*.nupkg
           if-no-files-found: error
 
+      # NuGet Trusted Publishing - Get short-lived API key via OIDC
+      - name: NuGet Trusted Publishing Login
+        uses: nuget/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}  # Your nuget.org username (profile name), NOT email
+
       - name: Push to NuGet
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           dotnet nuget push "artifacts/*.nupkg" \
-            --api-key "$NUGET_API_KEY" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --source "$NUGET_SOURCE" \
             --skip-duplicate

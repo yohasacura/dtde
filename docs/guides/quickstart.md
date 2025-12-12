@@ -110,7 +110,7 @@ Your data is now transparently sharded across multiple tables. DTDE handles:
 | **Full setup guide** | [Getting Started](getting-started.md) |
 | **Sharding strategies** | [Sharding Guide](sharding-guide.md) |
 | **Temporal versioning** | [Temporal Guide](temporal-guide.md) |
-| **API reference** | [Wiki](../wiki/README.md) |
+| **API reference** | [Wiki](../wiki/index.md) |
 
 ---
 
@@ -141,4 +141,4 @@ var current = await _context.ValidAt<Entity>(DateTime.Today).ToListAsync();
 
 ---
 
-[← Back to Guides](README.md) | [Full Getting Started →](getting-started.md)
+[← Back to Guides](index.md) | [Full Getting Started →](getting-started.md)
