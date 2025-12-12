@@ -165,7 +165,7 @@ modelBuilder.Entity<ComplianceAudit>(entity =>
 ## Running the Samples
 
 ### Prerequisites
-- .NET 9.0 SDK
+- .NET 8.0+ / 9.0+ / 10.0+ SDK
 - SQLite (bundled with samples)
 
 ### Build All Samples
@@ -194,7 +194,7 @@ builder.Services.AddDtdeDbContext<YourDbContext>(
     dtdeOptions =>
     {
         // Optional: Add pre-defined shards
-        dtdeOptions.AddShard(shardBuilder => 
+        dtdeOptions.AddShard(shardBuilder =>
         {
             shardBuilder.WithId("shard-1")
                         .WithConnectionString("...");
@@ -207,13 +207,13 @@ builder.Services.AddDtdeDbContext<YourDbContext>(
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
     base.OnModelCreating(modelBuilder);
-    
+
     modelBuilder.Entity<YourEntity>(entity =>
     {
         // Standard EF configuration
         entity.HasKey(e => e.Id);
         entity.Property(e => e.Name).IsRequired();
-        
+
         // DTDE sharding configuration
         entity.ShardBy(e => e.ShardKey);
         // OR
@@ -232,7 +232,7 @@ public class YourDbContext : DtdeDbContext
         : base(options)
     {
     }
-    
+
     public DbSet<YourEntity> Entities => Set<YourEntity>();
 }
 ```

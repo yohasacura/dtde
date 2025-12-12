@@ -4,8 +4,8 @@
 
 **Transparent horizontal sharding and temporal versioning for Entity Framework Core**
 
-[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
-[![EF Core](https://img.shields.io/badge/EF%20Core-9.0-512BD4?style=flat-square)](https://docs.microsoft.com/ef/core/)
+[![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%209.0%20%7C%2010.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
+[![EF Core](https://img.shields.io/badge/EF%20Core-8.0%20%7C%209.0%20%7C%2010.0-512BD4?style=flat-square)](https://docs.microsoft.com/ef/core/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-101%20passing-success?style=flat-square)](tests/)
 [![GitHub](https://img.shields.io/badge/GitHub-yohasacura%2Fdtde-181717?style=flat-square&logo=github)](https://github.com/yohasacura/dtde)
@@ -60,7 +60,7 @@ dotnet add package Dtde.Core          # Core implementations
 dotnet add package Dtde.EntityFramework  # EF Core integration
 ```
 
-**Requirements:** .NET 9.0+, Entity Framework Core 9.0+
+**Requirements:** .NET 8.0+ / 9.0+ / 10.0+, Entity Framework Core 8.0+ / 9.0+ / 10.0+
 
 ---
 
@@ -353,7 +353,7 @@ Comprehensive benchmarks comparing single table vs sharded approaches:
 | **CPU** | 12th Gen Intel Core i9-12900H (14 cores, 20 threads) |
 | **Runtime** | .NET 9.0, RyuJIT AVX2 |
 | **Database** | SQLite (file-based, separate DBs per benchmark) |
-| **Framework** | BenchmarkDotNet 0.14.0 |
+| **Framework** | BenchmarkDotNet 0.15.0 |
 
 ### Key Results
 

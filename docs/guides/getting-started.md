@@ -3,7 +3,7 @@
 This comprehensive guide walks you through setting up DTDE in your .NET application. By the end, you'll understand how to configure transparent sharding and optional temporal versioning.
 
 !!! info "Prerequisites"
-    - **.NET 9.0 SDK** or later
+    - **.NET 8.0 / 9.0 / 10.0 SDK** or later
     - **SQL Server** (local, Azure SQL, or SQL Server Express)
     - Basic knowledge of **Entity Framework Core**
     - An IDE (Visual Studio, VS Code, or Rider)
@@ -24,7 +24,7 @@ DTDE automatically includes:
 
 - `Dtde.Abstractions` - Core interfaces
 - `Dtde.Core` - Core implementations
-- `Microsoft.EntityFrameworkCore` (9.0+)
+- `Microsoft.EntityFrameworkCore` (8.0+ / 9.0+ / 10.0+)
 
 ---
 

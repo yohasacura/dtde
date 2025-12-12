@@ -17,7 +17,7 @@ This guide helps you migrate an existing Entity Framework Core application to us
 
 Before migrating:
 
-- [ ] .NET 9.0 SDK or later
+- [ ] .NET 8.0 / 9.0 / 10.0 SDK or later
 - [ ] Existing EF Core application
 - [ ] Understanding of your data access patterns
 - [ ] Backup of your production database

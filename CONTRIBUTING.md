@@ -6,7 +6,7 @@ Thanks for taking the time to contribute to **DTDE (Distributed Temporal Data En
 
 ### Prerequisites
 
-- .NET SDK 9.x
+- .NET SDK 8.x / 9.x / 10.x
 - A GitHub account
 
 ### Build
