@@ -122,9 +122,6 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
         // Extract temporal context from expression
         var temporalInfo = ExtractTemporalInfo(expression);
 
-        // Use sharding strategy if available
-        var shardingConfig = metadata.ShardingConfiguration;
-
         // First try date-based resolution
         if (temporalInfo.AsOfDate.HasValue)
         {
@@ -163,19 +160,14 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
     private static bool MatchesShardPredicate(IShardMetadata shard, IReadOnlyDictionary<string, object?> predicates)
     {
         // Check shard key value matching
-        if (!string.IsNullOrEmpty(shard.ShardKeyValue) && predicates.Count > 0)
+        if (string.IsNullOrEmpty(shard.ShardKeyValue) || predicates.Count == 0)
         {
-            foreach (var predicate in predicates.Values)
-            {
-                if (predicate is not null &&
-                    string.Equals(shard.ShardKeyValue, predicate.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
+            return false;
         }
 
-        return false;
+        return predicates.Values
+            .Where(p => p is not null)
+            .Any(p => string.Equals(shard.ShardKeyValue, p!.ToString(), StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -372,12 +364,11 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             // Look for Where method calls
-            if (node.Method.Name == "Where" && node.Arguments.Count == 2)
+            if (node.Method.Name == "Where" &&
+                node.Arguments.Count == 2 &&
+                node.Arguments[1] is UnaryExpression { Operand: LambdaExpression lambda })
             {
-                if (node.Arguments[1] is UnaryExpression { Operand: LambdaExpression lambda })
-                {
-                    ExtractFromLambda(lambda);
-                }
+                ExtractFromLambda(lambda);
             }
             return base.VisitMethodCall(node);
         }

@@ -299,13 +299,14 @@ public abstract class DtdeDbContext : DbContext
                 "DTDE is not configured. Call UseDtde() in your DbContext configuration.");
         }
 
-        return typeof(TService).Name switch
+        object service = typeof(TService).Name switch
         {
-            nameof(ITemporalContext) => (TService)extension.Options.TemporalContext,
-            nameof(IMetadataRegistry) => (TService)extension.Options.MetadataRegistry,
-            nameof(IShardRegistry) => (TService)extension.Options.ShardRegistry,
-            nameof(DtdeOptions) => (TService)(object)extension.Options,
+            nameof(ITemporalContext) => extension.Options.TemporalContext,
+            nameof(IMetadataRegistry) => extension.Options.MetadataRegistry,
+            nameof(IShardRegistry) => extension.Options.ShardRegistry,
+            nameof(DtdeOptions) => extension.Options,
             _ => throw new InvalidOperationException($"Unknown DTDE service type: {typeof(TService).Name}")
         };
+        return (TService)service;
     }
 }

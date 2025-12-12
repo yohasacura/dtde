@@ -106,21 +106,14 @@ public sealed class PropertyMetadata : IPropertyMetadata
     private static PropertyInfo ExtractPropertyInfo<TEntity, TProperty>(
         Expression<Func<TEntity, TProperty>> propertySelector)
     {
-        if (propertySelector.Body is MemberExpression memberExpression)
+        if (propertySelector.Body is MemberExpression { Member: PropertyInfo propertyInfo })
         {
-            if (memberExpression.Member is PropertyInfo propertyInfo)
-            {
-                return propertyInfo;
-            }
+            return propertyInfo;
         }
 
-        if (propertySelector.Body is UnaryExpression unaryExpression &&
-            unaryExpression.Operand is MemberExpression unaryMemberExpression)
+        if (propertySelector.Body is UnaryExpression { Operand: MemberExpression { Member: PropertyInfo unaryPropertyInfo } })
         {
-            if (unaryMemberExpression.Member is PropertyInfo propertyInfo)
-            {
-                return propertyInfo;
-            }
+            return unaryPropertyInfo;
         }
 
         throw new ArgumentException(

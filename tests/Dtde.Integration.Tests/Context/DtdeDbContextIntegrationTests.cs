@@ -149,7 +149,7 @@ public class DtdeDbContextIntegrationTests : IDisposable
 
         var newEffectiveDate = new DateTime(2024, 7, 1);
 
-        var newVersion = _context.CreateNewVersion(original, c =>
+        _ = _context.CreateNewVersion(original, c =>
         {
             c.Amount = 1500;
             c.CustomerName = "Updated Customer";

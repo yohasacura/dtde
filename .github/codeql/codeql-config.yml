@@ -1,0 +1,42 @@
+# CodeQL Configuration
+# https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/customizing-code-scanning
+
+name: "DTDE CodeQL Config"
+
+# Use default queries plus security-and-quality
+queries:
+  - uses: security-and-quality
+
+# Path filters - exclude sample projects from certain security checks
+# Samples are for demonstration purposes and intentionally simplified
+paths-ignore:
+  # Exclude benchmark artifacts
+  - 'benchmarks/**/BenchmarkDotNet.Artifacts/**'
+  - '**/bin/**'
+  - '**/obj/**'
+
+# Query filters - adjust severity for sample code
+query-filters:
+  # Log forging in samples is acceptable - they use structured logging with message templates
+  - exclude:
+      id: cs/log-forging
+      paths:
+        - 'samples/**'
+
+  # Missing access control in samples is intentional - they're demonstrations
+  - exclude:
+      id: cs/web/missing-function-level-access-control
+      paths:
+        - 'samples/**'
+
+  # IDOR in samples is acceptable - they're demonstrations without auth
+  - exclude:
+      id: cs/web/insecure-direct-object-reference
+      paths:
+        - 'samples/**'
+
+  # Exposure of sensitive info in samples is acceptable
+  - exclude:
+      id: cs/exposure-of-sensitive-information
+      paths:
+        - 'samples/**'

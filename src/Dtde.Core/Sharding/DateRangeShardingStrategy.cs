@@ -12,10 +12,10 @@ namespace Dtde.Core.Sharding;
 /// // Shard configuration:
 /// // Shard2023Q1: 2023-01-01 to 2023-04-01
 /// // Shard2023Q2: 2023-04-01 to 2023-07-01
-/// 
+///
 /// // Query: ValidAt(2023-03-15)
 /// // Result: [Shard2023Q1]
-/// 
+///
 /// // Query: Date range 2023-03-01 to 2023-05-01
 /// // Result: [Shard2023Q1, Shard2023Q2]
 /// </code>
@@ -163,13 +163,15 @@ public sealed class DateRangeShardingStrategy : IShardingStrategy
         // Also check shard key properties
         if (entity.Sharding is not null)
         {
-            foreach (var keyProp in entity.Sharding.ShardKeyProperties)
+            var dateKeyValues = entity.Sharding.ShardKeyProperties
+                .Select(keyProp => predicates.TryGetValue(keyProp.PropertyName, out var value) && value is DateTime dt ? dt : (DateTime?)null)
+                .Where(d => d.HasValue)
+                .Select(d => d!.Value);
+
+            foreach (var dateValue in dateKeyValues)
             {
-                if (predicates.TryGetValue(keyProp.PropertyName, out var value) && value is DateTime dateValue)
-                {
-                    start ??= dateValue;
-                    end ??= dateValue.AddTicks(1);
-                }
+                start ??= dateValue;
+                end ??= dateValue.AddTicks(1);
             }
         }
 

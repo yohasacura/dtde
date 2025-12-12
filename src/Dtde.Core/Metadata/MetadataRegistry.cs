@@ -99,42 +99,33 @@ public sealed class MetadataRegistry : IMetadataRegistry
             }
 
             // Validate temporal configuration
-            if (entity.Validity is not null)
+            if (entity.Validity is not null && entity.Validity.ValidFromProperty is null)
             {
-                if (entity.Validity.ValidFromProperty is null)
-                {
-                    errors.Add($"Entity '{entity.ClrType.Name}' has temporal configuration but no ValidFrom property.");
-                }
+                errors.Add($"Entity '{entity.ClrType.Name}' has temporal configuration but no ValidFrom property.");
             }
 
             // Validate sharding configuration
-            if (entity.Sharding is not null)
+            if (entity.Sharding is not null && entity.Sharding.ShardKeyProperties.Count == 0)
             {
-                if (entity.Sharding.ShardKeyProperties.Count == 0)
-                {
-                    errors.Add($"Entity '{entity.ClrType.Name}' has sharding configuration but no shard key properties.");
-                }
+                errors.Add($"Entity '{entity.ClrType.Name}' has sharding configuration but no shard key properties.");
             }
         }
 
         // Validate relations
-        foreach (var relationList in _relations.Values)
-        {
-            foreach (var relation in relationList)
-            {
-                // Validate temporal containment rules
-                if (relation.ContainmentRule != TemporalContainmentRule.None)
-                {
-                    if (!relation.ParentEntity.IsTemporal)
-                    {
-                        errors.Add($"Relation from '{relation.ParentEntity.ClrType.Name}' to '{relation.ChildEntity.ClrType.Name}' has temporal containment but parent is not temporal.");
-                    }
+        var relationsWithTemporalContainment = _relations.Values
+            .SelectMany(list => list)
+            .Where(r => r.ContainmentRule != TemporalContainmentRule.None);
 
-                    if (!relation.ChildEntity.IsTemporal)
-                    {
-                        errors.Add($"Relation from '{relation.ParentEntity.ClrType.Name}' to '{relation.ChildEntity.ClrType.Name}' has temporal containment but child is not temporal.");
-                    }
-                }
+        foreach (var relation in relationsWithTemporalContainment)
+        {
+            if (!relation.ParentEntity.IsTemporal)
+            {
+                errors.Add($"Relation from '{relation.ParentEntity.ClrType.Name}' to '{relation.ChildEntity.ClrType.Name}' has temporal containment but parent is not temporal.");
+            }
+
+            if (!relation.ChildEntity.IsTemporal)
+            {
+                errors.Add($"Relation from '{relation.ParentEntity.ClrType.Name}' to '{relation.ChildEntity.ClrType.Name}' has temporal containment but child is not temporal.");
             }
         }
 
