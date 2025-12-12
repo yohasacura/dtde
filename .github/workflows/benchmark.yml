@@ -58,7 +58,7 @@ jobs:
             --artifacts ./BenchmarkDotNet.Artifacts
 
       - name: Upload Benchmark Results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: benchmark-results
           path: benchmarks/Dtde.Benchmarks/BenchmarkDotNet.Artifacts
