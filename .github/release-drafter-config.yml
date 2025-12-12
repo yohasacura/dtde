@@ -1,0 +1,112 @@
+# Release Drafter Configuration
+# https://github.com/release-drafter/release-drafter#configuration
+
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+# Categories for organizing changes in release notes
+categories:
+  - title: '🚀 Features'
+    labels:
+      - 'feature'
+      - 'enhancement'
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'bug'
+      - 'fix'
+      - 'bugfix'
+  - title: '🔧 Maintenance'
+    labels:
+      - 'chore'
+      - 'maintenance'
+      - 'refactor'
+  - title: '📚 Documentation'
+    labels:
+      - 'documentation'
+      - 'docs'
+  - title: '⬆️ Dependencies'
+    labels:
+      - 'dependencies'
+    collapse-after: 5
+  - title: '🧪 Tests'
+    labels:
+      - 'test'
+      - 'tests'
+  - title: '⚡ Performance'
+    labels:
+      - 'performance'
+  - title: '💥 Breaking Changes'
+    labels:
+      - 'breaking'
+      - 'breaking-change'
+
+# Version resolver based on labels
+version-resolver:
+  major:
+    labels:
+      - 'breaking'
+      - 'breaking-change'
+      - 'major'
+  minor:
+    labels:
+      - 'feature'
+      - 'enhancement'
+      - 'minor'
+  patch:
+    labels:
+      - 'bug'
+      - 'fix'
+      - 'bugfix'
+      - 'documentation'
+      - 'chore'
+      - 'maintenance'
+      - 'dependencies'
+      - 'patch'
+  default: patch
+
+# Labels to exclude from release notes
+exclude-labels:
+  - 'skip-changelog'
+  - 'no-changelog'
+
+# Auto-labeler for PRs based on file paths
+autolabeler:
+  - label: 'documentation'
+    files:
+      - 'docs/**/*'
+      - '*.md'
+      - 'mkdocs.yml'
+  - label: 'tests'
+    files:
+      - 'tests/**/*'
+      - '*.Tests/**/*'
+  - label: 'ci'
+    files:
+      - '.github/**/*'
+  - label: 'core'
+    files:
+      - 'src/Dtde.Core/**/*'
+  - label: 'ef-core'
+    files:
+      - 'src/Dtde.EntityFramework/**/*'
+  - label: 'abstractions'
+    files:
+      - 'src/Dtde.Abstractions/**/*'
+  - label: 'samples'
+    files:
+      - 'samples/**/*'
+  - label: 'benchmarks'
+    files:
+      - 'benchmarks/**/*'
+
+# Template for release notes
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  ## Contributors
+
+  $CONTRIBUTORS
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

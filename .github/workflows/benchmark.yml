@@ -1,0 +1,102 @@
+# Benchmark Workflow
+# Runs performance benchmarks and tracks regressions
+
+name: Benchmark
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'benchmarks/**'
+      - '.github/workflows/benchmark.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'benchmarks/**'
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: 'Benchmark filter pattern (e.g., *Query*)'
+        required: false
+        default: '*'
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+          cache: true
+
+      - name: Restore
+        run: dotnet restore ./Dtde.sln
+
+      - name: Build Release
+        run: dotnet build ./Dtde.sln -c Release --no-restore
+
+      - name: Run Benchmarks
+        working-directory: benchmarks/Dtde.Benchmarks
+        run: |
+          dotnet run -c Release --no-build -- \
+            --filter "${{ github.event.inputs.filter || '*' }}" \
+            --exporters json \
+            --artifacts ./BenchmarkDotNet.Artifacts
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmarks/Dtde.Benchmarks/BenchmarkDotNet.Artifacts
+          retention-days: 30
+
+      # Store benchmark result for comparison (only on main branch push)
+      - name: Store Benchmark Result
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: DTDE Benchmarks
+          tool: 'benchmarkdotnet'
+          output-file-path: benchmarks/Dtde.Benchmarks/BenchmarkDotNet.Artifacts/results/Dtde.Benchmarks-report-full-compressed.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          # Alert if performance regresses by more than 10%
+          alert-threshold: '110%'
+          comment-on-alert: true
+          fail-on-alert: false
+          # Store results in gh-pages branch
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: benchmarks
+
+      # Compare with base branch on PRs
+      - name: Compare Benchmarks (PR)
+        if: github.event_name == 'pull_request'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: DTDE Benchmarks
+          tool: 'benchmarkdotnet'
+          output-file-path: benchmarks/Dtde.Benchmarks/BenchmarkDotNet.Artifacts/results/Dtde.Benchmarks-report-full-compressed.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          # Alert if performance regresses by more than 10%
+          alert-threshold: '110%'
+          comment-on-alert: true
+          fail-on-alert: false
+          # Compare against existing data
+          external-data-json-path: ./benchmark-data.json
+          save-data-file: false

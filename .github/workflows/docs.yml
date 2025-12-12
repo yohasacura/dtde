@@ -9,14 +9,12 @@ on:
       - main
     paths:
       - 'docs/**'
-      - 'mkdocs.yml'
       - '.github/workflows/docs.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'docs/**'
-      - 'mkdocs.yml'
   workflow_dispatch: # Allow manual trigger
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
@@ -49,22 +47,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-mkdocs-${{ hashFiles('**/requirements-docs.txt') }}
+          key: ${{ runner.os }}-pip-mkdocs-${{ hashFiles('docs/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-mkdocs-
 
       - name: Install MkDocs and dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install mkdocs-material mkdocs-minify-plugin
+          pip install -r docs/requirements.txt
 
       - name: Build documentation
+        working-directory: docs
         run: mkdocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs/site
 
   # Deploy job (only on push to main)
   deploy:

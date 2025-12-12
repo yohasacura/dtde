@@ -170,6 +170,6 @@ extra:
 extra_css:
   - stylesheets/extra.css
 
-# Watch directories for live reload
-watch:
-  - docs
+# Docs directory is now the same as config location
+docs_dir: .
+site_dir: site

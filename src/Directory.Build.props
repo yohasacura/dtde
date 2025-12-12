@@ -1,0 +1,17 @@
+<Project>
+  <!-- Inherit from root Directory.Build.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- NuGet package settings for publishable projects -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>Distributed Temporal Data Engine - A high-performance library for managing temporal data with advanced sharding capabilities in .NET applications.</Description>
+    <PackageTags>temporal;sharding;entity-framework;ef-core;database;dotnet;distributed</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Include readme in package -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+</Project>
