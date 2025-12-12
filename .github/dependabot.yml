@@ -28,8 +28,6 @@ updates:
       testing:
         patterns:
           - "xunit*"
-          - "Moq*"
-          - "FluentAssertions*"
           - "coverlet*"
           - "Microsoft.NET.Test.*"
 

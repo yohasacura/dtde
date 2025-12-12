@@ -1,6 +1,5 @@
 using Dtde.Core.Metadata;
 using Dtde.EntityFramework.Configuration;
-using FluentAssertions;
 
 namespace Dtde.EntityFramework.Tests.Configuration;
 
@@ -9,10 +8,8 @@ public class DtdeOptionsBuilderTests
     [Fact(DisplayName = "ConfigureEntity registers entity metadata in registry")]
     public void ConfigureEntity_RegistersEntityMetadata_InRegistry()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
 
-        // Act
         builder.ConfigureEntity<TestEntity>(entity =>
         {
             entity.HasTemporalValidity(
@@ -22,18 +19,16 @@ public class DtdeOptionsBuilderTests
 
         var options = GetBuiltOptions(builder);
 
-        // Assert
         var metadata = options.MetadataRegistry.GetEntityMetadata<TestEntity>();
-        metadata.Should().NotBeNull();
-        metadata!.Validity.Should().NotBeNull();
-        metadata.Validity!.ValidFromProperty.PropertyName.Should().Be("ValidFrom");
-        metadata.Validity!.ValidToProperty!.PropertyName.Should().Be("ValidTo");
+        Assert.NotNull(metadata);
+        Assert.NotNull(metadata!.Validity);
+        Assert.Equal("ValidFrom", metadata.Validity!.ValidFromProperty.PropertyName);
+        Assert.Equal("ValidTo", metadata.Validity!.ValidToProperty!.PropertyName);
     }
 
     [Fact(DisplayName = "AddShard adds shard metadata to options")]
     public void AddShard_AddsShardMetadata_ToOptions()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
         var shard = new ShardMetadataBuilder()
             .WithId("shard-1")
@@ -41,22 +36,18 @@ public class DtdeOptionsBuilderTests
             .WithConnectionString("Server=test;Database=TestDb")
             .Build();
 
-        // Act
         builder.AddShard(shard);
         var options = GetBuiltOptions(builder);
 
-        // Assert
-        options.Shards.Should().ContainSingle()
-            .Which.ShardId.Should().Be("shard-1");
+        Assert.Single(options.Shards);
+        Assert.Equal("shard-1", options.Shards.First().ShardId);
     }
 
     [Fact(DisplayName = "AddShard with configure action creates and adds shard")]
     public void AddShard_WithConfigureAction_CreatesAndAddsShard()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
 
-        // Act
         builder.AddShard(shard =>
         {
             shard.WithId("shard-2024")
@@ -67,91 +58,72 @@ public class DtdeOptionsBuilderTests
 
         var options = GetBuiltOptions(builder);
 
-        // Assert
         var shards = options.Shards.ToList();
-        shards.Should().ContainSingle();
-        shards[0].ShardId.Should().Be("shard-2024");
-        shards[0].Name.Should().Be("2024 Data");
-        shards[0].DateRange.Should().NotBeNull();
-        shards[0].DateRange!.Value.Start.Should().Be(new DateTime(2024, 1, 1));
-        shards[0].DateRange!.Value.End.Should().Be(new DateTime(2024, 12, 31));
+        Assert.Single(shards);
+        Assert.Equal("shard-2024", shards[0].ShardId);
+        Assert.Equal("2024 Data", shards[0].Name);
+        Assert.NotNull(shards[0].DateRange);
+        Assert.Equal(new DateTime(2024, 1, 1), shards[0].DateRange!.Value.Start);
+        Assert.Equal(new DateTime(2024, 12, 31), shards[0].DateRange!.Value.End);
     }
 
     [Fact(DisplayName = "SetMaxParallelShards configures parallelism limit")]
     public void SetMaxParallelShards_ConfiguresParallelismLimit()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
 
-        // Act
         builder.SetMaxParallelShards(5);
         var options = GetBuiltOptions(builder);
 
-        // Assert
-        options.MaxParallelShards.Should().Be(5);
+        Assert.Equal(5, options.MaxParallelShards);
     }
 
     [Fact(DisplayName = "SetMaxParallelShards throws for invalid values")]
     public void SetMaxParallelShards_ThrowsForInvalidValues()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
 
-        // Act
-        var act = () => builder.SetMaxParallelShards(0);
-
-        // Assert
-        act.Should().Throw<ArgumentOutOfRangeException>();
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.SetMaxParallelShards(0));
     }
 
     [Fact(DisplayName = "EnableDiagnostics sets diagnostics flag")]
     public void EnableDiagnostics_SetsDiagnosticsFlag()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
 
-        // Act
         builder.EnableDiagnostics();
         var options = GetBuiltOptions(builder);
 
-        // Assert
-        options.EnableDiagnostics.Should().BeTrue();
+        Assert.True(options.EnableDiagnostics);
     }
 
     [Fact(DisplayName = "EnableTestMode sets test mode flag")]
     public void EnableTestMode_SetsTestModeFlag()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
 
-        // Act
         builder.EnableTestMode();
         var options = GetBuiltOptions(builder);
 
-        // Assert
-        options.EnableTestMode.Should().BeTrue();
+        Assert.True(options.EnableTestMode);
     }
 
     [Fact(DisplayName = "SetDefaultTemporalContext configures temporal provider")]
     public void SetDefaultTemporalContext_ConfiguresTemporalProvider()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
         var expectedDate = new DateTime(2024, 6, 15);
 
-        // Act
         builder.SetDefaultTemporalContext(() => expectedDate);
         var options = GetBuiltOptions(builder);
 
-        // Assert
-        options.DefaultTemporalContextProvider.Should().NotBeNull();
-        options.DefaultTemporalContextProvider!().Should().Be(expectedDate);
+        Assert.NotNull(options.DefaultTemporalContextProvider);
+        Assert.Equal(expectedDate, options.DefaultTemporalContextProvider!());
     }
 
     [Fact(DisplayName = "AddShards adds multiple shards at once")]
     public void AddShards_AddsMultipleShards_AtOnce()
     {
-        // Arrange
         var builder = new DtdeOptionsBuilder();
         var shards = new[]
         {
@@ -160,18 +132,15 @@ public class DtdeOptionsBuilderTests
             new ShardMetadataBuilder().WithId("s3").WithConnectionString("cs3").Build()
         };
 
-        // Act
         builder.AddShards(shards);
         var options = GetBuiltOptions(builder);
 
-        // Assert
-        options.Shards.Should().HaveCount(3);
+        Assert.Equal(3, options.Shards.Count);
     }
 
     [Fact(DisplayName = "Builder fluent API allows method chaining")]
     public void Builder_FluentApi_AllowsMethodChaining()
     {
-        // Arrange & Act
         var builder = new DtdeOptionsBuilder()
             .EnableDiagnostics()
             .EnableTestMode()
@@ -181,12 +150,11 @@ public class DtdeOptionsBuilderTests
 
         var options = GetBuiltOptions(builder);
 
-        // Assert
-        options.EnableDiagnostics.Should().BeTrue();
-        options.EnableTestMode.Should().BeTrue();
-        options.MaxParallelShards.Should().Be(20);
-        options.Shards.Should().ContainSingle();
-        options.MetadataRegistry.GetEntityMetadata<TestEntity>().Should().NotBeNull();
+        Assert.True(options.EnableDiagnostics);
+        Assert.True(options.EnableTestMode);
+        Assert.Equal(20, options.MaxParallelShards);
+        Assert.Single(options.Shards);
+        Assert.NotNull(options.MetadataRegistry.GetEntityMetadata<TestEntity>());
     }
 
     /// <summary>

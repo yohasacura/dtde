@@ -2,7 +2,6 @@ using Dtde.Core.Metadata;
 using Dtde.EntityFramework;
 using Dtde.EntityFramework.Configuration;
 using Dtde.EntityFramework.Extensions;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dtde.Integration.Tests.Temporal;
@@ -24,7 +23,6 @@ public class TemporalQueryIntegrationTests : IDisposable
     [Fact(DisplayName = "Temporal query with LINQ Where clause combines correctly")]
     public async Task TemporalQuery_WithLinqWhereClause_CombinesCorrectly()
     {
-        // Arrange
         var products = new[]
         {
             new Product { Id = 1, Name = "Product A", Category = "Electronics", Price = 100, ValidFrom = new DateTime(2024, 1, 1), ValidTo = null },
@@ -36,20 +34,18 @@ public class TemporalQueryIntegrationTests : IDisposable
         await _context.Products.AddRangeAsync(products);
         await _context.SaveChangesAsync();
 
-        // Act - Get electronics valid in May 2024
         var mayElectronics = await _context.ValidAt<Product>(new DateTime(2024, 5, 15))
             .Where(p => p.Category == "Electronics")
             .ToListAsync();
 
-        // Assert
-        mayElectronics.Should().HaveCount(2);
-        mayElectronics.Select(p => p.Name).Should().BeEquivalentTo("Product A", "Product B");
+        Assert.Equal(2, mayElectronics.Count);
+        var names = mayElectronics.Select(p => p.Name).OrderBy(n => n).ToList();
+        Assert.Equal(["Product A", "Product B"], names);
     }
 
     [Fact(DisplayName = "Temporal query with OrderBy works correctly")]
     public async Task TemporalQuery_WithOrderBy_WorksCorrectly()
     {
-        // Arrange
         var products = new[]
         {
             new Product { Id = 1, Name = "Zebra", Price = 100, ValidFrom = new DateTime(2024, 1, 1), ValidTo = null },
@@ -60,7 +56,6 @@ public class TemporalQueryIntegrationTests : IDisposable
         await _context.Products.AddRangeAsync(products);
         await _context.SaveChangesAsync();
 
-        // Act
         var orderedByName = await _context.ValidAt<Product>(new DateTime(2024, 6, 1))
             .OrderBy(p => p.Name)
             .ToListAsync();
@@ -69,20 +64,18 @@ public class TemporalQueryIntegrationTests : IDisposable
             .OrderByDescending(p => p.Price)
             .ToListAsync();
 
-        // Assert
-        orderedByName[0].Name.Should().Be("Apple");
-        orderedByName[1].Name.Should().Be("Mango");
-        orderedByName[2].Name.Should().Be("Zebra");
+        Assert.Equal("Apple", orderedByName[0].Name);
+        Assert.Equal("Mango", orderedByName[1].Name);
+        Assert.Equal("Zebra", orderedByName[2].Name);
 
-        orderedByPrice[0].Price.Should().Be(200);
-        orderedByPrice[1].Price.Should().Be(150);
-        orderedByPrice[2].Price.Should().Be(100);
+        Assert.Equal(200, orderedByPrice[0].Price);
+        Assert.Equal(150, orderedByPrice[1].Price);
+        Assert.Equal(100, orderedByPrice[2].Price);
     }
 
     [Fact(DisplayName = "Temporal query with Select projection works correctly")]
     public async Task TemporalQuery_WithSelectProjection_WorksCorrectly()
     {
-        // Arrange
         var products = new[]
         {
             new Product { Id = 1, Name = "Product A", Category = "Cat1", Price = 100, ValidFrom = new DateTime(2024, 1, 1), ValidTo = null },
@@ -92,21 +85,18 @@ public class TemporalQueryIntegrationTests : IDisposable
         await _context.Products.AddRangeAsync(products);
         await _context.SaveChangesAsync();
 
-        // Act
         var projected = await _context.ValidAt<Product>(new DateTime(2024, 6, 1))
             .Select(p => new { p.Name, p.Price })
             .ToListAsync();
 
-        // Assert
-        projected.Should().HaveCount(2);
-        projected.Should().Contain(p => p.Name == "Product A" && p.Price == 100);
-        projected.Should().Contain(p => p.Name == "Product B" && p.Price == 200);
+        Assert.Equal(2, projected.Count);
+        Assert.Contains(projected, p => p.Name == "Product A" && p.Price == 100);
+        Assert.Contains(projected, p => p.Name == "Product B" && p.Price == 200);
     }
 
     [Fact(DisplayName = "Temporal query with aggregation works correctly")]
     public async Task TemporalQuery_WithAggregation_WorksCorrectly()
     {
-        // Arrange
         var products = new[]
         {
             new Product { Id = 1, Name = "P1", Price = 100, ValidFrom = new DateTime(2024, 1, 1), ValidTo = null },
@@ -117,21 +107,18 @@ public class TemporalQueryIntegrationTests : IDisposable
         await _context.Products.AddRangeAsync(products);
         await _context.SaveChangesAsync();
 
-        // Act - In June, P3 is expired
         var count = await _context.ValidAt<Product>(new DateTime(2024, 6, 1)).CountAsync();
         var sum = await _context.ValidAt<Product>(new DateTime(2024, 6, 1)).SumAsync(p => p.Price);
         var avg = await _context.ValidAt<Product>(new DateTime(2024, 6, 1)).AverageAsync(p => p.Price);
 
-        // Assert
-        count.Should().Be(2);
-        sum.Should().Be(300);
-        avg.Should().Be(150);
+        Assert.Equal(2, count);
+        Assert.Equal(300, sum);
+        Assert.Equal(150, avg);
     }
 
     [Fact(DisplayName = "Temporal query First/Single work correctly")]
     public async Task TemporalQuery_FirstSingle_WorkCorrectly()
     {
-        // Arrange
         var products = new[]
         {
             new Product { Id = 1, Name = "Unique", Price = 100, ValidFrom = new DateTime(2024, 1, 1), ValidTo = null },
@@ -141,22 +128,19 @@ public class TemporalQueryIntegrationTests : IDisposable
         await _context.Products.AddRangeAsync(products);
         await _context.SaveChangesAsync();
 
-        // Act
         var first = await _context.ValidAt<Product>(new DateTime(2024, 6, 1))
             .FirstAsync();
 
         var single = await _context.ValidAt<Product>(new DateTime(2024, 6, 1))
             .SingleAsync(p => p.Name == "Unique");
 
-        // Assert
-        first.Name.Should().Be("Unique");
-        single.Price.Should().Be(100);
+        Assert.Equal("Unique", first.Name);
+        Assert.Equal(100, single.Price);
     }
 
     [Fact(DisplayName = "Temporal query Any/All work correctly")]
     public async Task TemporalQuery_AnyAll_WorkCorrectly()
     {
-        // Arrange
         var products = new[]
         {
             new Product { Id = 1, Name = "Expensive", Price = 1000, ValidFrom = new DateTime(2024, 1, 1), ValidTo = null },
@@ -166,16 +150,14 @@ public class TemporalQueryIntegrationTests : IDisposable
         await _context.Products.AddRangeAsync(products);
         await _context.SaveChangesAsync();
 
-        // Act
         var anyExpensive = await _context.ValidAt<Product>(new DateTime(2024, 6, 1))
             .AnyAsync(p => p.Price > 500);
 
         var allExpensive = await _context.ValidAt<Product>(new DateTime(2024, 6, 1))
             .AllAsync(p => p.Price > 500);
 
-        // Assert
-        anyExpensive.Should().BeTrue();
-        allExpensive.Should().BeFalse();
+        Assert.True(anyExpensive);
+        Assert.False(allExpensive);
     }
 
     public void Dispose()

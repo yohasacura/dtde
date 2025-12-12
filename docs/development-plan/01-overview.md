@@ -230,7 +230,7 @@ var customers = await db.Customers.ValidAt(DateTime.Today).ToListAsync();
 | Database | SQL Server | Target platform (extensible for others) |
 | Logging | Microsoft.Extensions.Logging | Standard .NET logging abstraction |
 | DI | Microsoft.Extensions.DependencyInjection | Built-in .NET DI |
-| Testing | xUnit + FluentAssertions + Moq | Industry standard for .NET |
+| Testing | xUnit | Industry standard for .NET (MIT/Apache licensed) |
 | Benchmarking | BenchmarkDotNet | Performance validation |
 
 ---

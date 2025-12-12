@@ -2,7 +2,8 @@ using Dtde.Abstractions.Exceptions;
 using Dtde.Abstractions.Metadata;
 using Dtde.Core.Metadata;
 using Dtde.Core.Sharding;
-using Moq;
+using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Dtde.Core.Tests.Sharding;
 
@@ -12,12 +13,10 @@ namespace Dtde.Core.Tests.Sharding;
 public class PropertyBasedShardingStrategyTests
 {
     private readonly PropertyBasedShardingStrategy _strategy;
-    private readonly Mock<IShardRegistry> _mockRegistry;
 
     public PropertyBasedShardingStrategyTests()
     {
         _strategy = new PropertyBasedShardingStrategy();
-        _mockRegistry = new Mock<IShardRegistry>();
     }
 
     [Fact]
@@ -34,12 +33,12 @@ public class PropertyBasedShardingStrategyTests
         var apacShard = CreateShard("Customers_APAC", "APAC", ShardTier.Hot);
 
         var allShards = new List<IShardMetadata> { euShard, usShard, apacShard };
-        _mockRegistry.Setup(r => r.GetAllShards()).Returns(allShards);
+        var registry = new TestShardRegistry(allShards);
 
-        var entityMetadata = CreateMockEntityMetadata("Region");
+        var entityMetadata = CreateEntityMetadata("Region");
         var predicates = new Dictionary<string, object?> { { "Region", "US" } };
 
-        var result = _strategy.ResolveShards(entityMetadata, _mockRegistry.Object, predicates, null);
+        var result = _strategy.ResolveShards(entityMetadata, registry, predicates, null);
 
         Assert.Single(result);
         Assert.Equal("Customers_US", result[0].ShardId);
@@ -52,12 +51,12 @@ public class PropertyBasedShardingStrategyTests
         var usShard = CreateShard("Customers_US", "US", ShardTier.Hot);
 
         var allShards = new List<IShardMetadata> { euShard, usShard };
-        _mockRegistry.Setup(r => r.GetAllShards()).Returns(allShards);
+        var registry = new TestShardRegistry(allShards);
 
-        var entityMetadata = CreateMockEntityMetadata("Region");
+        var entityMetadata = CreateEntityMetadata("Region");
         var predicates = new Dictionary<string, object?> { { "Region", "UNKNOWN" } };
 
-        var result = _strategy.ResolveShards(entityMetadata, _mockRegistry.Object, predicates, null);
+        var result = _strategy.ResolveShards(entityMetadata, registry, predicates, null);
 
         Assert.Equal(2, result.Count);
     }
@@ -69,12 +68,12 @@ public class PropertyBasedShardingStrategyTests
         var shard2 = CreateShard("Shard2", "B", ShardTier.Hot, priority: 1);
 
         var allShards = new List<IShardMetadata> { shard1, shard2 };
-        _mockRegistry.Setup(r => r.GetAllShards()).Returns(allShards);
+        var registry = new TestShardRegistry(allShards);
 
-        var entityMetadata = CreateMockEntityMetadata("Key");
+        var entityMetadata = CreateEntityMetadata("Key");
         var predicates = new Dictionary<string, object?>();
 
-        var result = _strategy.ResolveShards(entityMetadata, _mockRegistry.Object, predicates, null);
+        var result = _strategy.ResolveShards(entityMetadata, registry, predicates, null);
 
         Assert.Equal(2, result.Count);
         Assert.Equal("Shard2", result[0].ShardId);
@@ -85,12 +84,12 @@ public class PropertyBasedShardingStrategyTests
     {
         var euShard = CreateShard("Customers_EU", "eu", ShardTier.Hot);
         var allShards = new List<IShardMetadata> { euShard };
-        _mockRegistry.Setup(r => r.GetAllShards()).Returns(allShards);
+        var registry = new TestShardRegistry(allShards);
 
-        var entityMetadata = CreateMockEntityMetadata("Region");
+        var entityMetadata = CreateEntityMetadata("Region");
         var predicates = new Dictionary<string, object?> { { "Region", "EU" } };
 
-        var result = _strategy.ResolveShards(entityMetadata, _mockRegistry.Object, predicates, null);
+        var result = _strategy.ResolveShards(entityMetadata, registry, predicates, null);
 
         Assert.Single(result);
         Assert.Equal("Customers_EU", result[0].ShardId);
@@ -102,13 +101,12 @@ public class PropertyBasedShardingStrategyTests
         var euShard = CreateShard("Customers_EU", "EU", ShardTier.Hot);
         var usShard = CreateShard("Customers_US", "US", ShardTier.Hot);
         var allShards = new List<IShardMetadata> { euShard, usShard };
-
-        _mockRegistry.Setup(r => r.GetWritableShards()).Returns(allShards);
+        var registry = new TestShardRegistry(allShards);
 
         var entity = new TestCustomer { Region = "EU" };
-        var entityMetadata = CreateMockEntityMetadata("Region", entity.GetType());
+        var entityMetadata = CreateEntityMetadata("Region", entity.GetType());
 
-        var result = _strategy.ResolveWriteShard(entityMetadata, _mockRegistry.Object, entity);
+        var result = _strategy.ResolveWriteShard(entityMetadata, registry, entity);
 
         Assert.Equal("Customers_EU", result.ShardId);
     }
@@ -118,27 +116,26 @@ public class PropertyBasedShardingStrategyTests
     {
         var euShard = CreateShard("Customers_EU", "EU", ShardTier.Hot);
         var allShards = new List<IShardMetadata> { euShard };
-
-        _mockRegistry.Setup(r => r.GetWritableShards()).Returns(allShards);
+        var registry = new TestShardRegistry(allShards);
 
         var entity = new TestCustomer { Region = "UNKNOWN" };
-        var entityMetadata = CreateMockEntityMetadata("Region", entity.GetType());
+        var entityMetadata = CreateEntityMetadata("Region", entity.GetType());
 
         Assert.Throws<ShardNotFoundException>(() =>
-            _strategy.ResolveWriteShard(entityMetadata, _mockRegistry.Object, entity));
+            _strategy.ResolveWriteShard(entityMetadata, registry, entity));
     }
 
     [Fact]
     public void ResolveWriteShard_WithNullKeyValue_ThrowsShardNotFoundException()
     {
         var euShard = CreateShard("Customers_EU", "EU", ShardTier.Hot);
-        _mockRegistry.Setup(r => r.GetWritableShards()).Returns(new List<IShardMetadata> { euShard });
+        var registry = new TestShardRegistry(new List<IShardMetadata> { euShard });
 
         var entity = new TestCustomer { Region = null! };
-        var entityMetadata = CreateMockEntityMetadata("Region", entity.GetType());
+        var entityMetadata = CreateEntityMetadata("Region", entity.GetType());
 
         Assert.Throws<ShardNotFoundException>(() =>
-            _strategy.ResolveWriteShard(entityMetadata, _mockRegistry.Object, entity));
+            _strategy.ResolveWriteShard(entityMetadata, registry, entity));
     }
 
     [Fact]
@@ -147,13 +144,12 @@ public class PropertyBasedShardingStrategyTests
         var euShard = CreateShard("Customers_EU", "EU", ShardTier.Hot);
         var defaultShard = CreateShardWithEmptyKey("Customers_Default", ShardTier.Hot);
         var allShards = new List<IShardMetadata> { euShard, defaultShard };
-
-        _mockRegistry.Setup(r => r.GetWritableShards()).Returns(allShards);
+        var registry = new TestShardRegistry(allShards);
 
         var entity = new TestCustomer { Region = "UNKNOWN" };
-        var entityMetadata = CreateMockEntityMetadata("Region", entity.GetType());
+        var entityMetadata = CreateEntityMetadata("Region", entity.GetType());
 
-        var result = _strategy.ResolveWriteShard(entityMetadata, _mockRegistry.Object, entity);
+        var result = _strategy.ResolveWriteShard(entityMetadata, registry, entity);
 
         Assert.Equal("Customers_Default", result.ShardId);
     }
@@ -188,30 +184,104 @@ public class PropertyBasedShardingStrategyTests
             .Build();
     }
 
-    private static IEntityMetadata CreateMockEntityMetadata(string shardKeyPropertyName, Type? entityType = null)
+    private static IEntityMetadata CreateEntityMetadata(string shardKeyPropertyName, Type? entityType = null)
     {
-        var mockMetadata = new Mock<IEntityMetadata>();
-        var mockShardingConfig = new Mock<IShardingConfiguration>();
-        var mockPropertyMetadata = new Mock<IPropertyMetadata>();
-
         entityType ??= typeof(TestCustomer);
+        return new TestEntityMetadata(entityType, shardKeyPropertyName);
+    }
 
-        mockPropertyMetadata.Setup(p => p.PropertyName).Returns(shardKeyPropertyName);
-        mockPropertyMetadata.Setup(p => p.GetValue(It.IsAny<object>()))
-            .Returns<object>(entity =>
-            {
-                var prop = entity.GetType().GetProperty(shardKeyPropertyName);
-                return prop?.GetValue(entity);
-            });
+    /// <summary>
+    /// Test double for IShardRegistry.
+    /// </summary>
+    private sealed class TestShardRegistry : IShardRegistry
+    {
+        private readonly IReadOnlyList<IShardMetadata> _shards;
 
-        mockShardingConfig.Setup(c => c.ShardKeyProperties)
-            .Returns(new List<IPropertyMetadata> { mockPropertyMetadata.Object });
+        public TestShardRegistry(IReadOnlyList<IShardMetadata> shards)
+        {
+            _shards = shards.OrderBy(s => s.Priority).ToList();
+        }
 
-        mockMetadata.Setup(m => m.ClrType).Returns(entityType);
-        mockMetadata.Setup(m => m.Sharding).Returns(mockShardingConfig.Object);
-        mockMetadata.Setup(m => m.ShardingConfiguration).Returns(mockShardingConfig.Object);
+        public IReadOnlyList<IShardMetadata> GetAllShards() => _shards;
 
-        return mockMetadata.Object;
+        public IShardMetadata? GetShard(string shardId) =>
+            _shards.FirstOrDefault(s => s.ShardId == shardId);
+
+        public IReadOnlyList<IShardMetadata> GetShardsByTier(ShardTier tier) =>
+            _shards.Where(s => s.Tier == tier).ToList();
+
+        public IReadOnlyList<IShardMetadata> GetWritableShards() =>
+            _shards.Where(s => !s.IsReadOnly).ToList();
+
+        public IReadOnlyList<IShardMetadata> GetShardsForDateRange(DateTime startDate, DateTime endDate) =>
+            _shards;
+    }
+
+    /// <summary>
+    /// Test double for IEntityMetadata.
+    /// </summary>
+    private sealed class TestEntityMetadata : IEntityMetadata
+    {
+        private readonly TestShardingConfiguration _shardingConfig;
+
+        public TestEntityMetadata(Type entityType, string shardKeyPropertyName)
+        {
+            ClrType = entityType;
+            _shardingConfig = new TestShardingConfiguration(entityType, shardKeyPropertyName);
+        }
+
+        public Type ClrType { get; }
+        public string TableName => ClrType.Name;
+        public string SchemaName => "dbo";
+        public IPropertyMetadata? PrimaryKey => null;
+        public IValidityConfiguration? Validity => null;
+        public IShardingConfiguration? Sharding => _shardingConfig;
+        public bool IsTemporal => false;
+        public bool IsSharded => true;
+    }
+
+    /// <summary>
+    /// Test double for IShardingConfiguration.
+    /// </summary>
+    private sealed class TestShardingConfiguration : IShardingConfiguration
+    {
+        public TestShardingConfiguration(Type entityType, string shardKeyPropertyName)
+        {
+            var propInfo = entityType.GetProperty(shardKeyPropertyName);
+            ShardKeyProperties = propInfo is not null
+                ? new List<IPropertyMetadata> { new TestPropertyMetadata(propInfo) }
+                : new List<IPropertyMetadata>();
+        }
+
+        public ShardingStrategyType StrategyType => ShardingStrategyType.PropertyValue;
+        public ShardStorageMode StorageMode => ShardStorageMode.Tables;
+        public LambdaExpression? ShardKeyExpression => null;
+        public IReadOnlyList<IPropertyMetadata> ShardKeyProperties { get; }
+        public IShardingStrategy Strategy => new PropertyBasedShardingStrategy();
+        public bool MigrationsEnabled => false;
+        public string? TableNamePattern => null;
+        public DateShardInterval? DateInterval => null;
+    }
+
+    /// <summary>
+    /// Test double for IPropertyMetadata.
+    /// </summary>
+    private sealed class TestPropertyMetadata : IPropertyMetadata
+    {
+        private readonly PropertyInfo _propertyInfo;
+
+        public TestPropertyMetadata(PropertyInfo propertyInfo)
+        {
+            _propertyInfo = propertyInfo;
+        }
+
+        public string PropertyName => _propertyInfo.Name;
+        public Type PropertyType => _propertyInfo.PropertyType;
+        public string ColumnName => _propertyInfo.Name;
+        public PropertyInfo PropertyInfo => _propertyInfo;
+
+        public object? GetValue(object entity) => _propertyInfo.GetValue(entity);
+        public void SetValue(object entity, object? value) => _propertyInfo.SetValue(entity, value);
     }
 
     private class TestCustomer

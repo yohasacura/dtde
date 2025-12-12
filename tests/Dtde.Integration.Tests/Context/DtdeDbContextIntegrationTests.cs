@@ -2,7 +2,6 @@ using Dtde.Core.Metadata;
 using Dtde.EntityFramework;
 using Dtde.EntityFramework.Configuration;
 using Dtde.EntityFramework.Extensions;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dtde.Integration.Tests.Context;
@@ -24,7 +23,6 @@ public class DtdeDbContextIntegrationTests : IDisposable
     [Fact(DisplayName = "ValidAt returns only entities valid at specified date")]
     public async Task ValidAt_ReturnsOnlyEntitiesValidAtSpecifiedDate()
     {
-        // Arrange
         var contracts = new[]
         {
             new Contract { Id = 1, ContractNumber = "C001", ValidFrom = new DateTime(2024, 1, 1), ValidTo = new DateTime(2024, 6, 30) },
@@ -35,22 +33,21 @@ public class DtdeDbContextIntegrationTests : IDisposable
         await _context.Contracts.AddRangeAsync(contracts);
         await _context.SaveChangesAsync();
 
-        // Act
         var validAtMay = await _context.ValidAt<Contract>(new DateTime(2024, 5, 15)).ToListAsync();
         var validAtAugust = await _context.ValidAt<Contract>(new DateTime(2024, 8, 15)).ToListAsync();
 
-        // Assert
-        validAtMay.Should().HaveCount(2);
-        validAtMay.Select(c => c.ContractNumber).Should().BeEquivalentTo("C001", "C002");
+        Assert.Equal(2, validAtMay.Count);
+        var mayNumbers = validAtMay.Select(c => c.ContractNumber).OrderBy(n => n).ToList();
+        Assert.Equal(["C001", "C002"], mayNumbers);
 
-        validAtAugust.Should().HaveCount(2);
-        validAtAugust.Select(c => c.ContractNumber).Should().BeEquivalentTo("C002", "C003");
+        Assert.Equal(2, validAtAugust.Count);
+        var augustNumbers = validAtAugust.Select(c => c.ContractNumber).OrderBy(n => n).ToList();
+        Assert.Equal(["C002", "C003"], augustNumbers);
     }
 
     [Fact(DisplayName = "ValidBetween returns entities overlapping with date range")]
     public async Task ValidBetween_ReturnsEntitiesOverlappingWithDateRange()
     {
-        // Arrange
         var contracts = new[]
         {
             new Contract { Id = 1, ContractNumber = "C001", ValidFrom = new DateTime(2024, 1, 1), ValidTo = new DateTime(2024, 3, 31) },
@@ -62,20 +59,17 @@ public class DtdeDbContextIntegrationTests : IDisposable
         await _context.Contracts.AddRangeAsync(contracts);
         await _context.SaveChangesAsync();
 
-        // Act - Query for Q2 (April to June)
         var q2Contracts = await _context.ValidBetween<Contract>(
             new DateTime(2024, 4, 1),
             new DateTime(2024, 6, 30)).ToListAsync();
 
-        // Assert
-        q2Contracts.Should().HaveCount(1);
-        q2Contracts[0].ContractNumber.Should().Be("C002");
+        Assert.Single(q2Contracts);
+        Assert.Equal("C002", q2Contracts[0].ContractNumber);
     }
 
     [Fact(DisplayName = "AllVersions returns all entity versions without filtering")]
     public async Task AllVersions_ReturnsAllVersions_WithoutFiltering()
     {
-        // Arrange - Multiple versions of the same contract
         var contracts = new[]
         {
             new Contract { Id = 1, ContractNumber = "C001", Amount = 1000, ValidFrom = new DateTime(2024, 1, 1), ValidTo = new DateTime(2024, 3, 31) },
@@ -86,23 +80,20 @@ public class DtdeDbContextIntegrationTests : IDisposable
         await _context.Contracts.AddRangeAsync(contracts);
         await _context.SaveChangesAsync();
 
-        // Act
         var allVersions = await _context.AllVersions<Contract>()
             .Where(c => c.ContractNumber == "C001")
             .OrderBy(c => c.ValidFrom)
             .ToListAsync();
 
-        // Assert
-        allVersions.Should().HaveCount(3);
-        allVersions[0].Amount.Should().Be(1000);
-        allVersions[1].Amount.Should().Be(1500);
-        allVersions[2].Amount.Should().Be(2000);
+        Assert.Equal(3, allVersions.Count);
+        Assert.Equal(1000, allVersions[0].Amount);
+        Assert.Equal(1500, allVersions[1].Amount);
+        Assert.Equal(2000, allVersions[2].Amount);
     }
 
     [Fact(DisplayName = "AddTemporal initializes entity with temporal validity")]
     public async Task AddTemporal_InitializesEntityWithTemporalValidity()
     {
-        // Arrange
         var effectiveDate = new DateTime(2024, 6, 1);
         var contract = new Contract
         {
@@ -111,20 +102,17 @@ public class DtdeDbContextIntegrationTests : IDisposable
             Amount = 5000
         };
 
-        // Act
         _context.AddTemporal(contract, effectiveDate);
         await _context.SaveChangesAsync();
 
-        // Assert
         var saved = await _context.Contracts.FirstAsync(c => c.ContractNumber == "C-NEW");
-        saved.ValidFrom.Should().Be(effectiveDate);
-        saved.ValidTo.Should().BeNull();
+        Assert.Equal(effectiveDate, saved.ValidFrom);
+        Assert.Null(saved.ValidTo);
     }
 
     [Fact(DisplayName = "Terminate sets ValidTo on entity")]
     public async Task Terminate_SetsValidToOnEntity()
     {
-        // Arrange
         var contract = new Contract
         {
             ContractNumber = "C-TERM",
@@ -137,19 +125,16 @@ public class DtdeDbContextIntegrationTests : IDisposable
 
         var terminationDate = new DateTime(2024, 12, 31);
 
-        // Act
         _context.Terminate(contract, terminationDate);
         await _context.SaveChangesAsync();
 
-        // Assert
         var updated = await _context.Contracts.FirstAsync(c => c.ContractNumber == "C-TERM");
-        updated.ValidTo.Should().Be(terminationDate);
+        Assert.Equal(terminationDate, updated.ValidTo);
     }
 
     [Fact(DisplayName = "CreateNewVersion terminates current and creates new version")]
     public async Task CreateNewVersion_TerminatesCurrentAndCreatesNewVersion()
     {
-        // Arrange
         var original = new Contract
         {
             ContractNumber = "C-VERSION",
@@ -164,7 +149,6 @@ public class DtdeDbContextIntegrationTests : IDisposable
 
         var newEffectiveDate = new DateTime(2024, 7, 1);
 
-        // Act
         var newVersion = _context.CreateNewVersion(original, c =>
         {
             c.Amount = 1500;
@@ -173,29 +157,25 @@ public class DtdeDbContextIntegrationTests : IDisposable
 
         await _context.SaveChangesAsync();
 
-        // Assert
         var versions = await _context.Contracts
             .Where(c => c.ContractNumber == "C-VERSION")
             .OrderBy(c => c.ValidFrom)
             .ToListAsync();
 
-        versions.Should().HaveCount(2);
+        Assert.Equal(2, versions.Count);
 
-        // Original version should be terminated
-        versions[0].Amount.Should().Be(1000);
-        versions[0].ValidTo.Should().Be(newEffectiveDate.AddTicks(-1));
+        Assert.Equal(1000, versions[0].Amount);
+        Assert.Equal(newEffectiveDate.AddTicks(-1), versions[0].ValidTo);
 
-        // New version should have updated values
-        versions[1].Amount.Should().Be(1500);
-        versions[1].CustomerName.Should().Be("Updated Customer");
-        versions[1].ValidFrom.Should().Be(newEffectiveDate);
-        versions[1].ValidTo.Should().BeNull();
+        Assert.Equal(1500, versions[1].Amount);
+        Assert.Equal("Updated Customer", versions[1].CustomerName);
+        Assert.Equal(newEffectiveDate, versions[1].ValidFrom);
+        Assert.Null(versions[1].ValidTo);
     }
 
     [Fact(DisplayName = "ValidAt returns non-temporal entities unchanged")]
     public async Task ValidAt_ReturnsNonTemporalEntities_Unchanged()
     {
-        // Arrange - AuditLog is not configured with temporal validity
         var logs = new[]
         {
             new AuditLog { Id = 1, Action = "Create", Timestamp = DateTime.Now },
@@ -205,11 +185,9 @@ public class DtdeDbContextIntegrationTests : IDisposable
         await _context.AuditLogs.AddRangeAsync(logs);
         await _context.SaveChangesAsync();
 
-        // Act - ValidAt on non-temporal entity should return all
         var result = await _context.ValidAt<AuditLog>(DateTime.Now).ToListAsync();
 
-        // Assert
-        result.Should().HaveCount(2);
+        Assert.Equal(2, result.Count);
     }
 
     public void Dispose()

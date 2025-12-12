@@ -1,6 +1,5 @@
 using Dtde.Abstractions.Metadata;
 using Dtde.Core.Metadata;
-using FluentAssertions;
 
 namespace Dtde.Integration.Tests.Sharding;
 
@@ -12,7 +11,6 @@ public class ShardRegistryIntegrationTests
     [Fact(DisplayName = "ShardRegistry resolves shards by date range")]
     public void ShardRegistry_ResolvesShardsByDateRange()
     {
-        // Arrange
         var shards = new[]
         {
             new ShardMetadataBuilder()
@@ -34,7 +32,6 @@ public class ShardRegistryIntegrationTests
 
         var registry = new ShardRegistry(shards);
 
-        // Act
         var shards2023 = registry.GetShardsForDateRange(
             new DateTime(2023, 6, 1),
             new DateTime(2023, 6, 30)).ToList();
@@ -47,16 +44,16 @@ public class ShardRegistryIntegrationTests
             new DateTime(2023, 10, 1),
             new DateTime(2024, 3, 31)).ToList();
 
-        // Assert
-        shards2023.Should().ContainSingle().Which.ShardId.Should().Be("shard-2023");
-        shards2024.Should().ContainSingle().Which.ShardId.Should().Be("shard-2024");
-        shardsSpanning.Should().HaveCount(2);
+        Assert.Single(shards2023);
+        Assert.Equal("shard-2023", shards2023[0].ShardId);
+        Assert.Single(shards2024);
+        Assert.Equal("shard-2024", shards2024[0].ShardId);
+        Assert.Equal(2, shardsSpanning.Count);
     }
 
     [Fact(DisplayName = "ShardRegistry returns shards ordered by priority")]
     public void ShardRegistry_ReturnsShardsOrderedByPriority()
     {
-        // Arrange
         var shards = new[]
         {
             new ShardMetadataBuilder()
@@ -78,19 +75,16 @@ public class ShardRegistryIntegrationTests
 
         var registry = new ShardRegistry(shards);
 
-        // Act
         var orderedShards = registry.GetAllShards().ToList();
 
-        // Assert - ShardRegistry orders by priority internally
-        orderedShards[0].ShardId.Should().Be("high-priority");
-        orderedShards[1].ShardId.Should().Be("default-priority");
-        orderedShards[2].ShardId.Should().Be("low-priority");
+        Assert.Equal("high-priority", orderedShards[0].ShardId);
+        Assert.Equal("default-priority", orderedShards[1].ShardId);
+        Assert.Equal("low-priority", orderedShards[2].ShardId);
     }
 
     [Fact(DisplayName = "ShardRegistry filters writable shards only")]
     public void ShardRegistry_FiltersWritableShardsOnly()
     {
-        // Arrange
         var shards = new[]
         {
             new ShardMetadataBuilder()
@@ -106,18 +100,15 @@ public class ShardRegistryIntegrationTests
 
         var registry = new ShardRegistry(shards);
 
-        // Act
         var writableShards = registry.GetWritableShards().ToList();
 
-        // Assert
-        writableShards.Should().ContainSingle()
-            .Which.ShardId.Should().Be("writable-shard");
+        Assert.Single(writableShards);
+        Assert.Equal("writable-shard", writableShards[0].ShardId);
     }
 
     [Fact(DisplayName = "ShardRegistry GetShard returns correct shard by ID")]
     public void ShardRegistry_GetShard_ReturnsCorrectShardById()
     {
-        // Arrange
         var shards = new[]
         {
             new ShardMetadataBuilder()
@@ -129,20 +120,17 @@ public class ShardRegistryIntegrationTests
 
         var registry = new ShardRegistry(shards);
 
-        // Act
         var found = registry.GetShard("target-shard");
         var notFound = registry.GetShard("non-existent");
 
-        // Assert
-        found.Should().NotBeNull();
-        found!.Name.Should().Be("Target Shard");
-        notFound.Should().BeNull();
+        Assert.NotNull(found);
+        Assert.Equal("Target Shard", found!.Name);
+        Assert.Null(notFound);
     }
 
     [Fact(DisplayName = "ShardRegistry distinguishes Hot, Warm, Cold tiers")]
     public void ShardRegistry_DistinguishesHotWarmColdTiers()
     {
-        // Arrange
         var shards = new[]
         {
             new ShardMetadataBuilder()
@@ -164,20 +152,17 @@ public class ShardRegistryIntegrationTests
 
         var registry = new ShardRegistry(shards);
 
-        // Act
         var allShards = registry.GetAllShards().ToList();
 
-        // Assert
-        allShards.Should().HaveCount(3);
-        allShards.Single(s => s.ShardId == "hot").Tier.Should().Be(ShardTier.Hot);
-        allShards.Single(s => s.ShardId == "warm").Tier.Should().Be(ShardTier.Warm);
-        allShards.Single(s => s.ShardId == "cold").Tier.Should().Be(ShardTier.Cold);
+        Assert.Equal(3, allShards.Count);
+        Assert.Equal(ShardTier.Hot, allShards.Single(s => s.ShardId == "hot").Tier);
+        Assert.Equal(ShardTier.Warm, allShards.Single(s => s.ShardId == "warm").Tier);
+        Assert.Equal(ShardTier.Cold, allShards.Single(s => s.ShardId == "cold").Tier);
     }
 
     [Fact(DisplayName = "ShardRegistry GetShardsByTier returns shards by tier")]
     public void ShardRegistry_GetShardsByTier_ReturnsShardsByTier()
     {
-        // Arrange
         var shards = new[]
         {
             new ShardMetadataBuilder()
@@ -199,56 +184,49 @@ public class ShardRegistryIntegrationTests
 
         var registry = new ShardRegistry(shards);
 
-        // Act
         var hotShards = registry.GetShardsByTier(ShardTier.Hot);
         var coldShards = registry.GetShardsByTier(ShardTier.Cold);
         var warmShards = registry.GetShardsByTier(ShardTier.Warm);
 
-        // Assert
-        hotShards.Should().HaveCount(2);
-        coldShards.Should().ContainSingle();
-        warmShards.Should().BeEmpty();
+        Assert.Equal(2, hotShards.Count);
+        Assert.Single(coldShards);
+        Assert.Empty(warmShards);
     }
 
     [Fact(DisplayName = "ShardRegistry AddShard dynamically adds shard")]
     public void ShardRegistry_AddShard_DynamicallyAddsShard()
     {
-        // Arrange
         var registry = new ShardRegistry();
         var shard = new ShardMetadataBuilder()
             .WithId("dynamic-shard")
             .WithConnectionString("cs")
             .Build();
 
-        // Act
         registry.AddShard(shard);
 
-        // Assert
-        registry.GetAllShards().Should().ContainSingle()
-            .Which.ShardId.Should().Be("dynamic-shard");
+        var allShards = registry.GetAllShards().ToList();
+        Assert.Single(allShards);
+        Assert.Equal("dynamic-shard", allShards[0].ShardId);
     }
 
     [Fact(DisplayName = "ShardRegistry handles shards without date ranges")]
     public void ShardRegistry_HandlesShardsWithoutDateRanges()
     {
-        // Arrange - A shard with no date range should match all date queries
         var shards = new[]
         {
             new ShardMetadataBuilder()
                 .WithId("unlimited-shard")
                 .WithConnectionString("cs")
-                .Build() // No date range
+                .Build()
         };
 
         var registry = new ShardRegistry(shards);
 
-        // Act
         var results = registry.GetShardsForDateRange(
             new DateTime(2020, 1, 1),
             new DateTime(2030, 12, 31)).ToList();
 
-        // Assert - Shards without date range should be returned for any query
-        results.Should().ContainSingle()
-            .Which.ShardId.Should().Be("unlimited-shard");
+        Assert.Single(results);
+        Assert.Equal("unlimited-shard", results[0].ShardId);
     }
 }
