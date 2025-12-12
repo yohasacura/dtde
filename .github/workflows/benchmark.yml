@@ -44,10 +44,10 @@ jobs:
           dotnet-version: 9.0.x
 
       - name: Restore
-        run: dotnet restore ./Dtde.sln
+        run: dotnet restore ./benchmarks/Dtde.Benchmarks/Dtde.Benchmarks.csproj
 
       - name: Build Release
-        run: dotnet build ./Dtde.sln -c Release --no-restore
+        run: dotnet build ./benchmarks/Dtde.Benchmarks/Dtde.Benchmarks.csproj -c Release --no-restore
 
       - name: Run Benchmarks
         working-directory: benchmarks/Dtde.Benchmarks
