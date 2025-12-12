@@ -1,60 +1,42 @@
-# Getting Started with DTDE
+# Getting Started
 
-This guide walks you through setting up DTDE (Distributed Temporal Data Engine) in your .NET application. By the end, you'll understand how to configure transparent sharding and optional temporal versioning for your Entity Framework Core entities.
+This comprehensive guide walks you through setting up DTDE in your .NET application. By the end, you'll understand how to configure transparent sharding and optional temporal versioning.
 
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Basic Setup](#basic-setup)
-- [Your First Sharded Entity](#your-first-sharded-entity)
-- [Querying Sharded Data](#querying-sharded-data)
-- [Adding Temporal Versioning](#adding-temporal-versioning)
-- [Next Steps](#next-steps)
-
----
-
-## Prerequisites
-
-Before you begin, ensure you have:
-
-- **.NET 9.0 SDK** or later
-- **SQL Server** (local, Azure SQL, or SQL Server Express)
-- Basic knowledge of **Entity Framework Core**
-- An IDE (Visual Studio, VS Code, or Rider)
+!!! info "Prerequisites"
+    - **.NET 9.0 SDK** or later
+    - **SQL Server** (local, Azure SQL, or SQL Server Express)
+    - Basic knowledge of **Entity Framework Core**
+    - An IDE (Visual Studio, VS Code, or Rider)
 
 ---
 
 ## Installation
 
-### Package Installation
-
-Install the DTDE NuGet package:
-
 ```bash
-# Using .NET CLI
+# Using .NET CLI (recommended)
 dotnet add package Dtde.EntityFramework
 
 # Using Package Manager Console
 Install-Package Dtde.EntityFramework
 ```
 
-### Package Dependencies
+DTDE automatically includes:
 
-DTDE automatically includes these dependencies:
+- `Dtde.Abstractions` - Core interfaces
+- `Dtde.Core` - Core implementations
 - `Microsoft.EntityFrameworkCore` (9.0+)
-- `Microsoft.EntityFrameworkCore.SqlServer` (9.0+)
 
 ---
 
 ## Basic Setup
 
-### Step 1: Create Your DbContext
+### 1. Create Your DbContext
 
 Inherit from `DtdeDbContext` instead of `DbContext`:
 
 ```csharp
 using Dtde.EntityFramework;
+using Dtde.EntityFramework.Extensions;
 using Microsoft.EntityFrameworkCore;
 
 namespace MyApp.Data;
@@ -71,16 +53,14 @@ public class AppDbContext : DtdeDbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        base.OnModelCreating(modelBuilder);
+        base.OnModelCreating(modelBuilder);  // Important: call base!
 
         // Entity configurations go here
     }
 }
 ```
 
-### Step 2: Configure Services
-
-Register DTDE in your application:
+### 2. Configure Services
 
 ```csharp
 // Program.cs
@@ -89,17 +69,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
-    options.UseDtde(); // Enable DTDE with default options
+    options.UseDtde();  // Enable DTDE with default options
 });
 
 var app = builder.Build();
 ```
 
-### Step 3: Configure Connection String
+### 3. Add Connection String
 
-Add your connection string to `appsettings.json`:
-
-```json
+```json title="appsettings.json"
 {
   "ConnectionStrings": {
     "Default": "Server=localhost;Database=MyApp;Trusted_Connection=True;TrustServerCertificate=True;"
@@ -111,9 +89,7 @@ Add your connection string to `appsettings.json`:
 
 ## Your First Sharded Entity
 
-### Define Your Entity
-
-Create a simple entity with a property suitable for sharding:
+### Define the Entity
 
 ```csharp
 namespace MyApp.Domain;
@@ -130,8 +106,6 @@ public class Customer
 
 ### Configure Sharding
 
-In your DbContext, configure sharding for the entity:
-
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
@@ -144,14 +118,12 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         // Shard by Region property
         entity.ShardBy(c => c.Region)
               .WithStorageMode(ShardStorageMode.Tables);
-        // Creates: Customers_EU, Customers_US, Customers_APAC, etc.
+        // Creates: Customers_EU, Customers_US, Customers_APAC
     });
 }
 ```
 
-### Configure Shards
-
-Define your shard configuration:
+### Define Shards
 
 ```csharp
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -159,23 +131,19 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString);
     options.UseDtde(dtde =>
     {
-        // Add shard definitions
         dtde.AddShard(s => s
             .WithId("EU")
             .WithShardKeyValue("EU")
-            .WithTable("Customers_EU", "dbo")
             .WithTier(ShardTier.Hot));
 
         dtde.AddShard(s => s
             .WithId("US")
             .WithShardKeyValue("US")
-            .WithTable("Customers_US", "dbo")
             .WithTier(ShardTier.Hot));
 
         dtde.AddShard(s => s
             .WithId("APAC")
             .WithShardKeyValue("APAC")
-            .WithTable("Customers_APAC", "dbo")
             .WithTier(ShardTier.Hot));
     });
 });
@@ -183,36 +151,27 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 ### Alternative: JSON Configuration
 
-Create a `shards.json` file:
-
-```json
+```json title="shards.json"
 {
   "shards": [
     {
       "shardId": "EU",
       "name": "Customers_EU",
       "shardKeyValue": "EU",
-      "tableName": "Customers_EU",
       "tier": "Hot"
     },
     {
       "shardId": "US",
       "name": "Customers_US",
       "shardKeyValue": "US",
-      "tableName": "Customers_US",
       "tier": "Hot"
     }
   ]
 }
 ```
 
-Load it in configuration:
-
 ```csharp
-options.UseDtde(dtde =>
-{
-    dtde.AddShardsFromConfig("shards.json");
-});
+options.UseDtde(dtde => dtde.AddShardsFromConfig("shards.json"));
 ```
 
 ---
@@ -221,25 +180,22 @@ options.UseDtde(dtde =>
 
 ### Transparent Queries
 
-DTDE handles sharding transparently. Write standard EF Core LINQ queries:
+Write standard EF Core LINQ - DTDE handles distribution:
 
 ```csharp
 public class CustomerService
 {
     private readonly AppDbContext _context;
 
-    public CustomerService(AppDbContext context)
-    {
-        _context = context;
-    }
+    public CustomerService(AppDbContext context) => _context = context;
 
-    // This query automatically executes across all shards
+    // Queries ALL shards, merges results
     public async Task<List<Customer>> GetAllCustomersAsync()
     {
         return await _context.Customers.ToListAsync();
     }
 
-    // This query is optimized to only hit the EU shard
+    // Optimized: only queries EU shard
     public async Task<List<Customer>> GetEuropeanCustomersAsync()
     {
         return await _context.Customers
@@ -251,7 +207,7 @@ public class CustomerService
     public async Task<List<Customer>> SearchCustomersAsync(string searchTerm)
     {
         return await _context.Customers
-            .Where(c => c.Name.Contains(searchTerm) || c.Email.Contains(searchTerm))
+            .Where(c => c.Name.Contains(searchTerm))
             .OrderBy(c => c.Name)
             .Take(100)
             .ToListAsync();
@@ -266,7 +222,7 @@ Inserts are automatically routed to the correct shard:
 ```csharp
 public async Task<Customer> CreateCustomerAsync(Customer customer)
 {
-    // DTDE automatically routes to correct shard based on Region
+    // DTDE routes to correct shard based on Region
     _context.Customers.Add(customer);
     await _context.SaveChangesAsync();
     return customer;
@@ -279,9 +235,9 @@ public async Task<Customer> CreateCustomerAsync(Customer customer)
 
 Temporal versioning is **optional**. Add it when you need to track entity history.
 
-### Update Your Entity
+### Define Temporal Entity
 
-Add temporal validity properties:
+Add validity properties (use any names you want):
 
 ```csharp
 public class Contract
@@ -290,11 +246,10 @@ public class Contract
     public string ContractNumber { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public string CustomerName { get; set; } = string.Empty;
-    public int Year { get; set; }  // Shard key
 
-    // Temporal properties (any names work)
+    // Temporal properties - any names work!
     public DateTime EffectiveDate { get; set; }
-    public DateTime? ExpirationDate { get; set; }
+    public DateTime? ExpirationDate { get; set; }  // null = currently valid
 }
 ```
 
@@ -305,9 +260,8 @@ modelBuilder.Entity<Contract>(entity =>
 {
     entity.HasKey(c => c.Id);
 
-    // Configure sharding
-    entity.ShardByDate(c => c.EffectiveDate, DateInterval.Year)
-          .WithStorageMode(ShardStorageMode.Tables);
+    // Optional: combine with sharding
+    entity.ShardByDate(c => c.EffectiveDate, DateShardInterval.Year);
 
     // Configure temporal validity
     entity.HasTemporalValidity(
@@ -318,71 +272,146 @@ modelBuilder.Entity<Contract>(entity =>
 
 ### Query Temporal Data
 
+Use `DtdeDbContext` methods for temporal queries:
+
 ```csharp
 // Get contracts valid today
 var currentContracts = await _context.ValidAt<Contract>(DateTime.Today)
     .ToListAsync();
 
-// Get contracts valid in Q1 2024
+// Get contracts valid during Q1 2024
 var q1Contracts = await _context.ValidBetween<Contract>(
     new DateTime(2024, 1, 1),
     new DateTime(2024, 3, 31))
     .ToListAsync();
 
-// Get all versions of a specific contract
+// Get ALL versions (bypasses temporal filtering)
 var history = await _context.AllVersions<Contract>()
     .Where(c => c.ContractNumber == "CTR-001")
     .OrderBy(c => c.EffectiveDate)
     .ToListAsync();
 ```
 
+### Temporal Write Operations
+
+```csharp
+// Add new entity with effective date
+_context.AddTemporal(contract, effectiveFrom: DateTime.Today);
+
+// Create new version (closes old, opens new)
+var newVersion = _context.CreateNewVersion(
+    existingContract,
+    changes: c => c.Amount = 50000m,
+    effectiveDate: DateTime.Today);
+
+// Terminate entity
+_context.Terminate(contract, terminationDate: DateTime.Today);
+
+await _context.SaveChangesAsync();
+```
+
+---
+
+## Complete Example
+
+```csharp title="Program.cs"
+using Dtde.EntityFramework;
+using Dtde.EntityFramework.Extensions;
+using Microsoft.EntityFrameworkCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
+    options.UseDtde(dtde =>
+    {
+        // Configure shards
+        dtde.AddShard(s => s.WithId("EU").WithShardKeyValue("EU").WithTier(ShardTier.Hot));
+        dtde.AddShard(s => s.WithId("US").WithShardKeyValue("US").WithTier(ShardTier.Hot));
+
+        // Performance settings
+        dtde.SetMaxParallelShards(10);
+        dtde.EnableDiagnostics();
+    });
+});
+
+var app = builder.Build();
+app.Run();
+```
+
+```csharp title="AppDbContext.cs"
+public class AppDbContext : DtdeDbContext
+{
+    public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<Contract> Contracts => Set<Contract>();
+
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        // Sharded entity
+        modelBuilder.Entity<Customer>(entity =>
+        {
+            entity.ShardBy(c => c.Region);
+        });
+
+        // Sharded + Temporal entity
+        modelBuilder.Entity<Contract>(entity =>
+        {
+            entity.ShardByDate(c => c.EffectiveDate, DateShardInterval.Year);
+            entity.HasTemporalValidity(c => c.EffectiveDate, c => c.ExpirationDate);
+        });
+    }
+}
+```
+
 ---
 
 ## Next Steps
 
-Now that you have DTDE set up, explore these advanced topics:
+<div class="grid cards" markdown>
 
-### Learn More About Sharding
-- [Sharding Guide](sharding-guide.md) - Detailed sharding strategies
-- [Hash Sharding](sharding-guide.md#hash-sharding) - Even data distribution
-- [Date Sharding](sharding-guide.md#date-sharding) - Time-based partitioning
+-   **[Sharding Guide](sharding-guide.md)**
 
-### Learn More About Temporal Features
-- [Temporal Guide](temporal-guide.md) - Complete temporal versioning guide
-- [Version Modes](temporal-guide.md#versioning-modes) - Soft delete, audit trail, append-only
+    Deep dive into all sharding strategies: property, hash, date, manual.
 
-### Advanced Configuration
-- [Configuration Reference](../wiki/configuration.md) - All configuration options
-- [API Reference](../wiki/api-reference.md) - Complete API documentation
+-   **[Temporal Guide](temporal-guide.md)**
 
-### Explore Examples
-- [Hash Sharding Sample](../../samples/Dtde.Samples.HashSharding/) - Even distribution example
-- [Date Sharding Sample](../../samples/Dtde.Samples.DateSharding/) - Time-based sharding
-- [Region Sharding Sample](../../samples/Dtde.Samples.RegionSharding/) - Geographic sharding
-- [Multi-Tenant Sample](../../samples/Dtde.Samples.MultiTenant/) - SaaS multi-tenancy
+    Complete guide to temporal versioning and point-in-time queries.
+
+-   **[API Reference](../wiki/api-reference.md)**
+
+    Complete API documentation for all classes and methods.
+
+-   **[Samples](https://github.com/yohasacura/dtde/tree/main/samples)**
+
+    Working examples for each sharding strategy.
+
+</div>
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
+??? question "My queries return empty results"
+    - Ensure shards are properly configured and match your data
+    - Check that shard key values match exactly (case-sensitive)
+    - Verify database tables exist
 
-**Q: My queries are returning empty results**
-- Ensure shards are properly configured and match your data
-- Check that shard key values match exactly (case-sensitive by default)
-- Verify database tables exist
+??? question "Performance is slow"
+    - Review `MaxParallelShards` setting
+    - Enable diagnostics: `dtde.EnableDiagnostics()`
+    - Check that shard predicates optimize queries
 
-**Q: Performance is slow**
-- Review `MaxParallelShards` setting
-- Enable diagnostics: `dtde.EnableDiagnostics()`
-- Check that shard predicates optimize queries
-
-**Q: Getting "No shards found" errors**
-- Verify shard registry contains matching shards
-- Check entity is configured for sharding in `OnModelCreating`
+??? question "Getting 'No shards found' errors"
+    - Verify shard registry contains matching shards
+    - Check entity is configured for sharding in `OnModelCreating`
 
 For more help, see the [Troubleshooting Guide](../wiki/troubleshooting.md).
 
 ---
 
-[← Back to Guides](index.md) | [Next: Sharding Guide →](sharding-guide.md)
+[← Back to Guides](index.md) | [Sharding Guide →](sharding-guide.md)

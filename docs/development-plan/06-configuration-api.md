@@ -127,7 +127,7 @@ public class AppDbContext : DtdeDbContext
             entity.HasKey(c => c.Id);
             
             // Sharding by year (table sharding)
-            entity.ShardByDate(c => c.EffectiveDate, DateInterval.Year)
+            entity.ShardByDate(c => c.EffectiveDate, DateShardInterval.Year)
                   .WithStorageMode(ShardStorageMode.Tables);
             // Creates: Contracts_2023, Contracts_2024, etc.
             
@@ -181,7 +181,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     {
         dtde.ConfigureEntity<Contract>(entity =>
         {
-            entity.ShardByDate(c => c.EffectiveDate, DateInterval.Year)
+            entity.ShardByDate(c => c.EffectiveDate, DateShardInterval.Year)
                   .WithStorageMode(ShardStorageMode.Databases)
                   .AddDatabase("2023", "Server=shard1;Database=Contracts2023;...")
                   .AddDatabase("2024", "Server=shard2;Database=Contracts2024;...");

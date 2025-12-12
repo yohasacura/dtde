@@ -362,17 +362,17 @@ Configures date-based sharding.
 public static ShardingConfigurationBuilder<TEntity> ShardByDate<TEntity>(
     this EntityTypeBuilder<TEntity> builder,
     Expression<Func<TEntity, DateTime>> dateProperty,
-    DateInterval interval)
+    DateShardInterval interval = DateShardInterval.Year)
     where TEntity : class
 ```
 
 **Parameters:**
 - `dateProperty` - DateTime property to shard by
-- `interval` - Date interval (Year, Month, Quarter, Week)
+- `interval` - Date interval (Year, Quarter, Month, Day)
 
 **Example:**
 ```csharp
-entity.ShardByDate(o => o.CreatedAt, DateInterval.Year);
+entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Year);
 ```
 
 #### HasTemporalValidity
@@ -613,10 +613,10 @@ public enum ShardTier
 }
 ```
 
-### DateInterval
+### DateShardInterval
 
 ```csharp
-public enum DateInterval
+public enum DateShardInterval
 {
     Year,
     Month,

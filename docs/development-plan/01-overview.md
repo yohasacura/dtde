@@ -14,7 +14,7 @@
 | **05** | [Update Engine](05-update-engine.md) | Temporal versioning, write pipeline |
 | **06** | [Configuration & API](06-configuration-api.md) | Fluent API, DI extensions, developer experience |
 | **07** | [Testing Strategy](07-testing-strategy.md) | Test plan, scenarios, and quality gates |
-| **08** | [Implementation Phases](08-implementation-phases.md) | Milestones, sprints, and delivery timeline |
+| **08** | [Implementation Phases](08-implementation-phases.md) | Milestones and delivery timeline |
 
 ---
 
@@ -139,7 +139,7 @@ modelBuilder.Entity<Customer>()
 
 // Shard by Year (date-based)
 modelBuilder.Entity<Order>()
-    .ShardByDate(o => o.OrderDate, DateInterval.Year);
+    .ShardByDate(o => o.OrderDate, DateShardInterval.Year);
 
 // Shard by ID (hash-based, even distribution)
 modelBuilder.Entity<Product>()

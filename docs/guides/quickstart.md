@@ -1,12 +1,13 @@
-# DTDE Quickstart
+# Quick Start
 
-Get DTDE running in under 5 minutes! This guide shows you the fastest path to transparent sharding.
+Get DTDE running in **5 minutes**. This guide shows the fastest path to transparent sharding.
 
-## ⏱️ Time Required: 5 minutes
+!!! tip "Time Required"
+    ⏱️ **5 minutes** for basic setup
 
 ---
 
-## Step 1: Install Package (30 seconds)
+## Step 1: Install Package
 
 ```bash
 dotnet add package Dtde.EntityFramework
@@ -14,10 +15,25 @@ dotnet add package Dtde.EntityFramework
 
 ---
 
-## Step 2: Create DbContext (1 minute)
+## Step 2: Define Your Entity
+
+```csharp
+public class Product
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;  // Shard key
+    public decimal Price { get; set; }
+}
+```
+
+---
+
+## Step 3: Create DbContext
 
 ```csharp
 using Dtde.EntityFramework;
+using Dtde.EntityFramework.Extensions;
 using Microsoft.EntityFrameworkCore;
 
 public class AppDbContext : DtdeDbContext
@@ -35,19 +51,11 @@ public class AppDbContext : DtdeDbContext
             .ShardBy(p => p.Category);
     }
 }
-
-public class Product
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Category { get; set; } = string.Empty;  // Shard key
-    public decimal Price { get; set; }
-}
 ```
 
 ---
 
-## Step 3: Configure Services (1 minute)
+## Step 4: Configure Services
 
 ```csharp
 // Program.cs
@@ -69,18 +77,18 @@ var app = builder.Build();
 
 ---
 
-## Step 4: Use It! (1 minute)
+## Step 5: Use It!
 
 ```csharp
 // Queries are automatically distributed across shards
 var allProducts = await _context.Products.ToListAsync();
 
-// Shard-specific queries are optimized
+// Shard-specific queries are optimized (only queries Electronics shard)
 var electronics = await _context.Products
     .Where(p => p.Category == "Electronics")
     .ToListAsync();
 
-// Inserts are automatically routed
+// Inserts are automatically routed to correct shard
 _context.Products.Add(new Product
 {
     Name = "Laptop",
@@ -92,31 +100,22 @@ await _context.SaveChangesAsync();
 
 ---
 
-## ✅ You're Done!
+## ✅ Done!
 
-Your data is now transparently sharded across multiple tables. DTDE handles:
+Your data is now transparently sharded. DTDE handles:
 
-- ✅ Query routing to correct shard(s)
-- ✅ Parallel execution across shards
-- ✅ Result merging
-- ✅ Insert/Update routing
-
----
-
-## 🚀 Next Steps
-
-| What | Link |
-|------|------|
-| **Full setup guide** | [Getting Started](getting-started.md) |
-| **Sharding strategies** | [Sharding Guide](sharding-guide.md) |
-| **Temporal versioning** | [Temporal Guide](temporal-guide.md) |
-| **API reference** | [Wiki](../wiki/index.md) |
+| Feature | What DTDE Does |
+|---------|----------------|
+| **Query Routing** | Automatically routes to correct shard(s) |
+| **Parallel Execution** | Queries multiple shards simultaneously |
+| **Result Merging** | Combines results into unified response |
+| **Write Routing** | Routes inserts/updates to correct shard |
 
 ---
 
 ## Quick Reference
 
-### Sharding Options
+### Sharding Methods
 
 ```csharp
 // Property-based sharding
@@ -126,7 +125,12 @@ entity.ShardBy(e => e.Region);
 entity.ShardByHash(e => e.Id, shardCount: 8);
 
 // Date-based sharding
-entity.ShardByDate(e => e.CreatedAt, DateInterval.Year);
+entity.ShardByDate(e => e.CreatedAt, DateShardInterval.Year);
+
+// Manual sharding (pre-created tables)
+entity.UseManualSharding(config => {
+    config.AddTable("dbo.Orders_2024", o => o.Year == 2024);
+});
 ```
 
 ### Temporal Queries (Optional)
@@ -135,10 +139,37 @@ entity.ShardByDate(e => e.CreatedAt, DateInterval.Year);
 // Enable temporal on entity
 entity.HasTemporalValidity(e => e.ValidFrom, e => e.ValidTo);
 
-// Query point-in-time
+// Query point-in-time (DtdeDbContext method)
 var current = await _context.ValidAt<Entity>(DateTime.Today).ToListAsync();
+
+// Get all versions
+var history = await _context.AllVersions<Entity>().ToListAsync();
 ```
 
 ---
 
-[← Back to Guides](index.md) | [Full Getting Started →](getting-started.md)
+## What's Next?
+
+<div class="grid cards" markdown>
+
+-   **[Complete Guide](getting-started.md)**
+
+    Full tutorial covering installation, configuration, and all concepts.
+
+-   **[Sharding Guide](sharding-guide.md)**
+
+    Deep dive into property, hash, date, and range sharding strategies.
+
+-   **[Temporal Guide](temporal-guide.md)**
+
+    Point-in-time queries and version tracking.
+
+-   **[API Reference](../wiki/api-reference.md)**
+
+    Complete API documentation.
+
+</div>
+
+---
+
+[← Back to Guides](index.md) | [Complete Guide →](getting-started.md)

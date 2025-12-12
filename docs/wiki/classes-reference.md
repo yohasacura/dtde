@@ -724,10 +724,10 @@ public enum ShardTier
 }
 ```
 
-### DateInterval
+### DateShardInterval
 
 ```csharp
-public enum DateInterval
+public enum DateShardInterval
 {
     Year,
     Month,

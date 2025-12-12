@@ -118,19 +118,19 @@ entity.ShardByRange(o => o.OrderDate, new[]
 
 ```csharp
 // Yearly sharding
-entity.ShardByDate(o => o.OrderDate, DateInterval.Year);
+entity.ShardByDate(o => o.OrderDate, DateShardInterval.Year);
 // Results in: Orders_2023, Orders_2024, Orders_2025
 
 // Monthly sharding
-entity.ShardByDate(o => o.OrderDate, DateInterval.Month);
+entity.ShardByDate(o => o.OrderDate, DateShardInterval.Month);
 // Results in: Orders_2024_01, Orders_2024_02, ... Orders_2024_12
 
 // Quarterly sharding
-entity.ShardByDate(o => o.OrderDate, DateInterval.Quarter);
+entity.ShardByDate(o => o.OrderDate, DateShardInterval.Quarter);
 // Results in: Orders_2024_Q1, Orders_2024_Q2, Orders_2024_Q3, Orders_2024_Q4
 
 // Weekly sharding
-entity.ShardByDate(o => o.OrderDate, DateInterval.Week);
+entity.ShardByDate(o => o.OrderDate, DateShardInterval.Week);
 // Results in: Orders_2024_W01, Orders_2024_W02, ... Orders_2024_W52
 ```
 
@@ -138,7 +138,7 @@ entity.ShardByDate(o => o.OrderDate, DateInterval.Week);
 
 ```csharp
 // Custom date pattern
-entity.ShardByDate(o => o.OrderDate, DateInterval.Month, 
+entity.ShardByDate(o => o.OrderDate, DateShardInterval.Month, 
     formatPattern: "yyyyMM");
 // Results in: Orders_202401, Orders_202402
 
@@ -198,7 +198,7 @@ entity.ShardByRowCount(maxRowsPerShard: 500_000,
 ```csharp
 // Combine row count with date for deterministic routing
 entity.ShardByRowCount(maxRowsPerShard: 1_000_000,
-    fallbackStrategy: ShardByDate(o => o.CreatedAt, DateInterval.Month));
+    fallbackStrategy: ShardByDate(o => o.CreatedAt, DateShardInterval.Month));
 ```
 
 ---
@@ -320,7 +320,7 @@ entity.ShardBy(o => o.Region, ShardStorageMode.Databases)
 
 ```csharp
 // Primary strategy with overflow handling
-entity.ShardByDate(o => o.OrderDate, DateInterval.Year)
+entity.ShardByDate(o => o.OrderDate, DateShardInterval.Year)
       .WithOverflowStrategy(ShardByRowCount(1_000_000));
 // If 2024 exceeds 1M rows, creates Orders_2024_1, Orders_2024_2
 ```

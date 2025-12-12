@@ -295,7 +295,7 @@ entity.HasTemporalValidity(c => c.ValidFrom, c => c.ValidTo);  // Temporal key
 
 ```csharp
 // Same property for both (common pattern)
-entity.ShardByDate(c => c.EffectiveDate, DateInterval.Year);
+entity.ShardByDate(c => c.EffectiveDate, DateShardInterval.Year);
 entity.HasTemporalValidity(c => c.EffectiveDate, c => c.ExpirationDate);
 ```
 

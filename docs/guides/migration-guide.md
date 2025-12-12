@@ -87,7 +87,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
     // Configure sharding for specific entities
     modelBuilder.Entity<Order>(entity =>
     {
-        entity.ShardByDate(o => o.CreatedAt, DateInterval.Year);
+        entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Year);
     });
 
     // Non-sharded entities work as normal EF Core
@@ -291,7 +291,7 @@ Enable DTDE per-entity:
 
 ```csharp
 // Phase 1: Only Orders sharded
-modelBuilder.Entity<Order>().ShardByDate(o => o.CreatedAt, DateInterval.Year);
+modelBuilder.Entity<Order>().ShardByDate(o => o.CreatedAt, DateShardInterval.Year);
 
 // Phase 2: Add Customers
 modelBuilder.Entity<Customer>().ShardBy(c => c.Region);

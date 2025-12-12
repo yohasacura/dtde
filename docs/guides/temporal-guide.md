@@ -85,7 +85,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         entity.HasKey(c => c.Id);
 
         // Configure sharding (optional)
-        entity.ShardByDate(c => c.EffectiveDate, DateInterval.Year);
+        entity.ShardByDate(c => c.EffectiveDate, DateShardInterval.Year);
 
         // Configure temporal validity
         entity.HasTemporalValidity(

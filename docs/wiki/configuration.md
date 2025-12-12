@@ -262,7 +262,7 @@ modelBuilder.Entity<Customer>(entity =>
 ```csharp
 modelBuilder.Entity<Order>(entity =>
 {
-    entity.ShardByDate(o => o.CreatedAt, DateInterval.Year)
+    entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Year)
           .WithStorageMode(ShardStorageMode.Tables);
 });
 ```

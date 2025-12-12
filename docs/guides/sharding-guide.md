@@ -190,20 +190,20 @@ Partition data by time periods. Ideal for:
 
 ```csharp
 // Yearly sharding
-entity.ShardByDate(o => o.CreatedAt, DateInterval.Year);
+entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Year);
 // Shards: Orders_2023, Orders_2024, Orders_2025
 
 // Monthly sharding
-entity.ShardByDate(o => o.CreatedAt, DateInterval.Month);
+entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Month);
 // Shards: Orders_2024_01, Orders_2024_02, ... Orders_2024_12
 
 // Quarterly sharding
-entity.ShardByDate(o => o.CreatedAt, DateInterval.Quarter);
+entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Quarter);
 // Shards: Orders_2024_Q1, Orders_2024_Q2, Orders_2024_Q3, Orders_2024_Q4
 
-// Weekly sharding
-entity.ShardByDate(o => o.CreatedAt, DateInterval.Week);
-// Shards: Orders_2024_W01, Orders_2024_W02, ... Orders_2024_W52
+// Daily sharding
+entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Day);
+// Shards: Orders_2024_01_01, Orders_2024_01_02, ...
 ```
 
 #### Configuration with Date Ranges
@@ -452,7 +452,7 @@ dtde.AddShard(s => s
 ### Time-Series Data
 
 ```csharp
-entity.ShardByDate(e => e.Timestamp, DateInterval.Month)
+entity.ShardByDate(e => e.Timestamp, DateShardInterval.Month)
       .WithStorageMode(ShardStorageMode.Tables);
 
 // Automatic monthly tables

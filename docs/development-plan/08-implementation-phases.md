@@ -79,7 +79,7 @@ Feature: Sharding Configuration
 
   Scenario: Configure entity with date-based sharding
     Given an entity type "Order" with property "OrderDate"
-    When I configure sharding using ShardByDate(o => o.OrderDate, DateInterval.Year)
+    When I configure sharding using ShardByDate(o => o.OrderDate, DateShardInterval.Year)
     Then the ShardingConfiguration should use DateRange strategy
     And shard tables should be named "Orders_2023", "Orders_2024", etc.
 
@@ -523,14 +523,16 @@ Feature: Production Readiness
 
 ## 8. Resource Requirements
 
-### 8.1 Development Team
+### 8.1 Development Approach
 
-| Role | Count | Phases |
-|------|-------|--------|
-| Senior .NET Developer | 2 | All phases |
-| EF Core Specialist | 1 | Phases 2-4 |
-| QA Engineer | 1 | Phases 3-5 |
-| Technical Writer | 0.5 | Phase 5 |
+This project is developed as a **solo endeavor**, combining all roles:
+
+| Responsibility | Phases | Notes |
+|----------------|--------|-------|
+| Architecture & Core Development | All phases | Primary focus |
+| EF Core Integration | Phases 2-4 | Deep integration work |
+| Testing & QA | All phases | Continuous quality focus |
+| Documentation | Phase 5 | Final polish |
 
 ### 8.2 Infrastructure
 

@@ -98,7 +98,7 @@ dtde.ConfigureSharding<Customer>(options =>
 | **Property-Based** | Shard by any property value | `ShardBy(c => c.Region)` |
 | **Hash-Based** | Distribute evenly by hash | `ShardByHash(c => c.Id, shardCount: 4)` |
 | **Range-Based** | Shard by value ranges | `ShardByRange(c => c.Id, ranges)` |
-| **Date-Based** | Shard by date periods | `ShardByDate(c => c.CreatedAt, DateInterval.Year)` |
+| **Date-Based** | Shard by date periods | `ShardByDate(c => c.CreatedAt, DateShardInterval.Year)` |
 | **Alphabetic** | Shard by first letter(s) | `ShardByAlphabet(c => c.Name, "A-M", "N-Z")` |
 | **Row Count** | Auto-create shards at row limits | `ShardByRowCount(maxRows: 1_000_000)` |
 | **Expression** | Custom LINQ-based logic | `ShardBy(c => ComputeShard(c))` |
@@ -112,7 +112,7 @@ entity.ShardBy(c => c.Region);
 entity.ShardByHash(c => c.Id, shardCount: 8);
 
 // Date-based (yearly tables)
-entity.ShardByDate(c => c.CreatedAt, DateInterval.Year);
+entity.ShardByDate(c => c.CreatedAt, DateShardInterval.Year);
 
 // Alphabetic (A-M, N-Z)
 entity.ShardByAlphabet(c => c.LastName, new[] { "A-M", "N-Z" });
@@ -394,7 +394,7 @@ builder.Services.AddDtdeDbContext<AppDbContext>(
         // Sharded entity with temporal
         dtdeOptions.ConfigureEntity<Contract>(e =>
         {
-            e.ShardByDate(c => c.EffectiveDate, DateInterval.Year);
+            e.ShardByDate(c => c.EffectiveDate, DateShardInterval.Year);
             e.HasTemporalValidity(c => c.EffectiveDate, c => c.ExpirationDate);
             e.StorageMode = ShardStorageMode.Tables;
         });
