@@ -452,6 +452,7 @@ public sealed class TransparentShardingInterceptor : SaveChangesInterceptor, IDb
         // This is necessary because many DTDE services are registered as scoped
         IServiceProvider serviceProvider;
         IServiceScope? scope = null;
+        var disposeScope = true; // Track whether we should dispose scope on exit
 
         try
         {
@@ -470,7 +471,9 @@ public sealed class TransparentShardingInterceptor : SaveChangesInterceptor, IDb
                 serviceProvider = scope.ServiceProvider;
             }
         }
+#pragma warning disable CA1031 // Catch general exception to handle DI resolution failures gracefully
         catch
+#pragma warning restore CA1031
         {
             // Fallback to creating a new scope from the root provider
             scope = _serviceProvider.CreateScope();
@@ -488,7 +491,6 @@ public sealed class TransparentShardingInterceptor : SaveChangesInterceptor, IDb
             if (coordinator is null || contextFactory is null || metadataRegistry is null ||
                 shardRegistry is null || writeRouter is null)
             {
-                scope?.Dispose();
                 return null;
             }
 
@@ -503,8 +505,9 @@ public sealed class TransparentShardingInterceptor : SaveChangesInterceptor, IDb
             var transaction = await coordinator.BeginTransactionAsync(options, cancellationToken)
                 .ConfigureAwait(false);
 
-            // Note: scope is not disposed here because services are used by the session
+            // Success path: scope ownership transfers to the session
             // The session will manage the service lifetime
+            disposeScope = false;
             return new TransparentShardSession(
                 transaction,
                 metadataRegistry,
@@ -512,10 +515,13 @@ public sealed class TransparentShardingInterceptor : SaveChangesInterceptor, IDb
                 writeRouter,
                 _logger);
         }
-        catch
+        finally
         {
-            scope?.Dispose();
-            throw;
+            // Dispose scope on any exit path except when successfully creating a session
+            if (disposeScope)
+            {
+                scope?.Dispose();
+            }
         }
     }
 

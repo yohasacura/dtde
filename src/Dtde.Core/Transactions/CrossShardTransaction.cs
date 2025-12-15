@@ -98,7 +98,8 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
             return; // Already enlisted
         }
 
-        var shard = _shardRegistry.GetShard(shardId)
+        // Validate shard exists (throws ShardNotFoundException if not found)
+        _ = _shardRegistry.GetShard(shardId)
             ?? throw new ShardNotFoundException($"Shard '{shardId}' not found in registry.");
 
         await EnlistInternalAsync(shardId, cancellationToken).ConfigureAwait(false);
@@ -207,7 +208,9 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
             {
                 await RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             }
+#pragma warning disable CA1031 // Must catch all exceptions during dispose to ensure cleanup completes
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 TransactionLogMessages.RollbackError(_logger, ex, TransactionId);
             }
@@ -258,9 +261,11 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
                     var vote = await participant.PrepareAsync(cancellationToken).ConfigureAwait(false);
                     return (participant.ShardId, Vote: vote, Error: (Exception?)null);
                 }
+#pragma warning disable CA1031 // Catch all exceptions during 2PC prepare phase to ensure proper abort handling
                 catch (Exception ex)
+#pragma warning restore CA1031
                 {
-                    return (participant.ShardId, Vote: ParticipantVote.Abort, Error: ex);
+                    return (participant.ShardId, Vote: ParticipantVote.Abort, Error: (Exception?)ex);
                 }
             });
 
@@ -300,7 +305,9 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
                 await participant.CommitAsync(cancellationToken).ConfigureAwait(false);
                 committedShards.Add(participant.ShardId);
             }
+#pragma warning disable CA1031 // Must catch all exceptions during 2PC commit to track partial failures
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 failedShards.Add(participant.ShardId);
                 firstError ??= ex;
@@ -334,7 +341,9 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
                 await participant.RollbackAsync(cancellationToken).ConfigureAwait(false);
                 return (participant.ShardId, Success: true);
             }
+#pragma warning disable CA1031 // Must catch all exceptions during rollback to ensure all shards are attempted
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 TransactionLogMessages.ShardRollbackFailed(_logger, ex, participant.ShardId, TransactionId);
                 return (participant.ShardId, Success: false);

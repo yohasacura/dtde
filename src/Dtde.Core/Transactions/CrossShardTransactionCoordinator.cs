@@ -152,7 +152,9 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
                     options,
                     cancellationToken).ConfigureAwait(false);
             }
+#pragma warning disable CA1031 // Must catch all exceptions to ensure proper rollback
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 TransactionLogMessages.TransactionFailed(_logger, ex, transaction.TransactionId);
 
@@ -160,7 +162,9 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                 }
+#pragma warning disable CA1031 // Must catch all exceptions during rollback to prevent masking original exception
                 catch (Exception rollbackEx)
+#pragma warning restore CA1031
                 {
                     TransactionLogMessages.TransactionRollbackError(_logger, rollbackEx, transaction.TransactionId);
                 }
@@ -211,7 +215,9 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
 
                 return result!;
             }
+#pragma warning disable CA1031 // Must catch all exceptions to ensure proper rollback
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 TransactionLogMessages.TransactionFailed(_logger, ex, transaction.TransactionId);
 
@@ -219,7 +225,9 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                 }
+#pragma warning disable CA1031 // Must catch all exceptions during rollback to prevent masking original exception
                 catch (Exception rollbackEx)
+#pragma warning restore CA1031
                 {
                     TransactionLogMessages.TransactionRollbackError(_logger, rollbackEx, transaction.TransactionId);
                 }

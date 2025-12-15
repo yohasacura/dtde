@@ -949,7 +949,7 @@ public sealed class TransparentShardingInterceptorTests : IDisposable
         using var context = new TestDbContext(options);
         context.TestEntities.Add(new TestEntity { Id = 1, Name = "Test" });
 
-        var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         // Act & Assert - Cancellation should be propagated

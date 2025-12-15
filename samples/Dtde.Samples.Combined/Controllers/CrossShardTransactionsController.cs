@@ -113,10 +113,10 @@ public class CrossShardTransactionsController : ControllerBase
         if (sourceAccount.Balance < request.Amount)
             return BadRequest("Insufficient funds");
 
+        // Log using sanitized internal account data, not direct user input
         _logger.LogInformation(
-            "Cross-shard transfer: {Amount} from {Source} (region: {SourceRegion}) to {Dest} (region: {DestRegion})",
-            request.Amount, request.SourceAccountNumber, sourceAccount.Region,
-            request.DestinationAccountNumber, destAccount.Region);
+            "Cross-shard transfer: {Amount} from account in region {SourceRegion} to account in region {DestRegion}",
+            request.Amount, sourceAccount.Region, destAccount.Region);
 
         // Update source account balance (region shard: sourceAccount.Region)
         var sourcePreviousBalance = sourceAccount.Balance;
@@ -294,7 +294,9 @@ public class CrossShardTransactionsController : ControllerBase
                 Message = "All batch operations completed atomically across shards"
             });
         }
+#pragma warning disable CA1031 // API error handler must catch all exceptions for proper HTTP response
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             // Rollback - DTDE ensures all shards are rolled back
             await transaction.RollbackAsync();
@@ -389,7 +391,9 @@ public class CrossShardTransactionsController : ControllerBase
                 UsAccountNumber = usAccount.AccountNumber
             });
         }
+#pragma warning disable CA1031 // API error handler must catch all exceptions for proper HTTP response
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             await transaction.RollbackAsync();
 
@@ -442,9 +446,11 @@ public class CrossShardTransactionsController : ControllerBase
     [HttpGet("portfolio/{holderId}")]
     public async Task<ActionResult<CustomerPortfolio>> GetCustomerPortfolio(string holderId)
     {
+        // Sanitize holderId for logging (remove newlines/control chars that could forge log entries)
+        var sanitizedHolderId = SanitizeForLogging(holderId);
         _logger.LogInformation(
             "Fetching portfolio for holder {HolderId} across all regional shards",
-            holderId);
+            sanitizedHolderId);
 
         var accounts = await _context.Accounts
             .Where(a => a.HolderId == holderId)
@@ -501,6 +507,22 @@ public class CrossShardTransactionsController : ControllerBase
 
     private static string GenerateReference() =>
         $"TRF-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpper()}";
+
+    /// <summary>
+    /// Sanitizes user input for safe logging to prevent log forging attacks.
+    /// Removes newlines and control characters that could inject fake log entries.
+    /// </summary>
+    private static string SanitizeForLogging(string? input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return string.Empty;
+
+        // Replace newlines and control characters to prevent log injection
+        return input
+            .Replace("\r", string.Empty, StringComparison.Ordinal)
+            .Replace("\n", string.Empty, StringComparison.Ordinal)
+            .Replace("\t", " ", StringComparison.Ordinal);
+    }
 
     #endregion
 }

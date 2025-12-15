@@ -149,7 +149,9 @@ public sealed class ShardTransactionParticipant : ITransactionParticipant, IAsyn
                 await _transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
             }
         }
+#pragma warning disable CA1031 // Best effort rollback - must not throw
         catch (Exception)
+#pragma warning restore CA1031
         {
             // Best effort rollback - log but don't throw
         }
