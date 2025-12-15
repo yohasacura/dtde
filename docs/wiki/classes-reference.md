@@ -8,6 +8,7 @@ Detailed documentation for all DTDE classes, interfaces, and their members.
 - [Metadata Classes](#metadata-classes)
 - [Query Classes](#query-classes)
 - [Update Classes](#update-classes)
+- [Transaction Classes](#transaction-classes)
 - [Configuration Classes](#configuration-classes)
 - [Interfaces](#interfaces)
 
@@ -490,6 +491,228 @@ public void CloseValidity<TEntity>(
     DateTime closureDate)
     where TEntity : class
 ```
+
+---
+
+## Transaction Classes
+
+### CrossShardTransactionCoordinator
+
+Coordinates transactions across multiple database shards.
+
+```csharp
+namespace Dtde.Core.Transactions;
+
+public class CrossShardTransactionCoordinator : ICrossShardTransactionCoordinator
+```
+
+#### Constructor
+
+```csharp
+public CrossShardTransactionCoordinator(
+    IShardRegistry shardRegistry,
+    Func<string, CancellationToken, Task<DbContext>> contextFactory,
+    ILogger<CrossShardTransactionCoordinator> coordinatorLogger,
+    ILogger<CrossShardTransaction> transactionLogger)
+```
+
+#### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `CurrentTransaction` | `ICrossShardTransaction?` | Active transaction |
+
+#### Methods
+
+```csharp
+/// <summary>
+/// Begins a new cross-shard transaction.
+/// </summary>
+public async Task<ICrossShardTransaction> BeginTransactionAsync(
+    CrossShardTransactionOptions? options = null,
+    CancellationToken cancellationToken = default)
+
+/// <summary>
+/// Executes an action within a transaction with automatic commit/rollback.
+/// </summary>
+public async Task ExecuteInTransactionAsync(
+    Func<ICrossShardTransaction, Task> action,
+    CrossShardTransactionOptions? options = null,
+    CancellationToken cancellationToken = default)
+
+/// <summary>
+/// Executes a function within a transaction and returns a result.
+/// </summary>
+public async Task<TResult> ExecuteInTransactionAsync<TResult>(
+    Func<ICrossShardTransaction, Task<TResult>> func,
+    CrossShardTransactionOptions? options = null,
+    CancellationToken cancellationToken = default)
+
+/// <summary>
+/// Recovers in-doubt transactions after a failure.
+/// </summary>
+public async Task<int> RecoverAsync(CancellationToken cancellationToken = default)
+```
+
+### CrossShardTransaction
+
+Represents an active cross-shard transaction.
+
+```csharp
+namespace Dtde.Core.Transactions;
+
+public class CrossShardTransaction : ICrossShardTransaction
+```
+
+#### Constructor
+
+```csharp
+public CrossShardTransaction(
+    string transactionId,
+    CrossShardTransactionOptions options,
+    IShardRegistry shardRegistry,
+    Func<string, CancellationToken, Task<DbContext>> contextFactory,
+    ILogger<CrossShardTransaction> logger)
+```
+
+#### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `TransactionId` | `string` | Unique ID (format: `XS-{timestamp}-{guid}`) |
+| `State` | `TransactionState` | Current state |
+| `IsolationLevel` | `CrossShardIsolationLevel` | Isolation level |
+| `Timeout` | `TimeSpan` | Transaction timeout |
+| `EnlistedShards` | `IReadOnlyCollection<string>` | Enlisted shard IDs |
+
+#### Methods
+
+```csharp
+/// <summary>
+/// Enlists a shard in this transaction.
+/// </summary>
+public async Task EnlistAsync(
+    string shardId,
+    CancellationToken cancellationToken = default)
+
+/// <summary>
+/// Commits the transaction using two-phase commit.
+/// </summary>
+public async Task CommitAsync(CancellationToken cancellationToken = default)
+
+/// <summary>
+/// Rolls back the transaction on all enlisted shards.
+/// </summary>
+public async Task RollbackAsync(CancellationToken cancellationToken = default)
+
+/// <summary>
+/// Gets the transaction participant for a shard.
+/// </summary>
+public ITransactionParticipant? GetParticipant(string shardId)
+```
+
+### CrossShardTransactionOptions
+
+Configuration options for cross-shard transactions.
+
+```csharp
+namespace Dtde.Abstractions.Transactions;
+
+public class CrossShardTransactionOptions
+```
+
+#### Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Timeout` | `TimeSpan` | 30s | Transaction timeout |
+| `IsolationLevel` | `CrossShardIsolationLevel` | `ReadCommitted` | Isolation level |
+| `EnableRetry` | `bool` | `true` | Enable retry |
+| `MaxRetryAttempts` | `int` | `3` | Max retries |
+| `RetryDelay` | `TimeSpan` | 100ms | Initial delay |
+| `UseExponentialBackoff` | `bool` | `true` | Exponential backoff |
+| `MaxRetryDelay` | `TimeSpan` | 10s | Max delay |
+| `TransactionName` | `string?` | `null` | Name for logging |
+| `EnableRecovery` | `bool` | `false` | Enable recovery |
+
+#### Static Properties
+
+| Property | Description |
+|----------|-------------|
+| `Default` | Default configuration |
+| `ShortLived` | 10s timeout, 2 retries |
+| `LongRunning` | 5min timeout, recovery enabled |
+
+#### Static Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `DefaultTimeout` | `TimeSpan` | Modifiable default timeout |
+| `DefaultIsolationLevel` | `CrossShardIsolationLevel` | Modifiable default level |
+
+### TransactionParticipant
+
+Represents a shard's participation in a cross-shard transaction.
+
+```csharp
+namespace Dtde.Core.Transactions;
+
+public class TransactionParticipant : ITransactionParticipant
+```
+
+#### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ShardId` | `string` | Shard identifier |
+| `Context` | `DbContext` | Shard's DbContext |
+| `Transaction` | `IDbContextTransaction?` | Local transaction |
+| `State` | `ParticipantState` | Participant state |
+
+#### Methods
+
+```csharp
+/// <summary>
+/// Prepares the participant for commit (Phase 1).
+/// </summary>
+public async Task PrepareAsync(CancellationToken cancellationToken = default)
+
+/// <summary>
+/// Commits the local transaction (Phase 2).
+/// </summary>
+public async Task CommitAsync(CancellationToken cancellationToken = default)
+
+/// <summary>
+/// Rolls back the local transaction.
+/// </summary>
+public async Task RollbackAsync(CancellationToken cancellationToken = default)
+```
+
+### TransparentShardingInterceptor
+
+EF Core interceptor for automatic cross-shard transaction handling.
+
+```csharp
+namespace Dtde.EntityFramework.Infrastructure;
+
+public class TransparentShardingInterceptor : SaveChangesInterceptor, IDbTransactionInterceptor
+```
+
+#### Constructor
+
+```csharp
+public TransparentShardingInterceptor(
+    IServiceProvider serviceProvider,
+    ILogger<TransparentShardingInterceptor> logger)
+```
+
+#### Behavior
+
+- Intercepts `SaveChanges` and `SaveChangesAsync`
+- Detects when entities target multiple shards
+- Automatically coordinates cross-shard transactions
+- Skips handling when explicit transactions are active
+- Resolves scoped services from DbContext's service provider
 
 ---
 

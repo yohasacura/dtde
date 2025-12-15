@@ -8,6 +8,7 @@ This document describes the internal architecture of DTDE, its components, and h
 - [Core Components](#core-components)
 - [Query Pipeline](#query-pipeline)
 - [Update Pipeline](#update-pipeline)
+- [Cross-Shard Transactions](#cross-shard-transactions)
 - [Storage Modes](#storage-modes)
 - [Extension Points](#extension-points)
 
@@ -341,6 +342,183 @@ For temporal entities, updates create new versions:
 | Id | Amount | ValidFrom  | ValidTo    |
 | 1  | 10000  | 2024-01-01 | 2024-06-30 |  // Closed
 | 2  | 15000  | 2024-07-01 | NULL       |  // New version
+```
+
+---
+
+## Cross-Shard Transactions
+
+DTDE provides two-phase commit (2PC) support for operations spanning multiple database shards.
+
+### Transaction Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Application Layer                                  │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  await coordinator.ExecuteInTransactionAsync(async tx => {          │   │
+│  │      await tx.EnlistAsync("shard-eu");                               │   │
+│  │      await tx.EnlistAsync("shard-us");                               │   │
+│  │      // Modify data in both shards                                   │   │
+│  │      await context.SaveChangesAsync();                               │   │
+│  │  });                                                                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   CrossShardTransactionCoordinator                           │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐ │
+│  │  Transaction    │  │   Phase 1:      │  │      Phase 2:               │ │
+│  │  Lifecycle      │  │   PREPARE       │  │      COMMIT/ROLLBACK        │ │
+│  │  Management     │  │                 │  │                             │ │
+│  └────────┬────────┘  └────────┬────────┘  └──────────────┬──────────────┘ │
+│           │                    │                          │                │
+└───────────┼────────────────────┼──────────────────────────┼────────────────┘
+            │                    │                          │
+            ▼                    ▼                          ▼
+    ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+    │  Shard EU     │    │  Shard US     │    │  Shard APAC   │
+    │  Participant  │    │  Participant  │    │  Participant  │
+    │  ┌─────────┐  │    │  ┌─────────┐  │    │  ┌─────────┐  │
+    │  │DbContext│  │    │  │DbContext│  │    │  │DbContext│  │
+    │  │   +     │  │    │  │   +     │  │    │  │   +     │  │
+    │  │ Tx      │  │    │  │ Tx      │  │    │  │ Tx      │  │
+    │  └─────────┘  │    │  └─────────┘  │    │  └─────────┘  │
+    └───────────────┘    └───────────────┘    └───────────────┘
+```
+
+### Two-Phase Commit Protocol
+
+```
+Phase 1: PREPARE
+┌─────────────┐          ┌─────────────┐          ┌─────────────┐
+│ Coordinator │          │  Shard EU   │          │  Shard US   │
+└──────┬──────┘          └──────┬──────┘          └──────┬──────┘
+       │                        │                        │
+       │──── PREPARE ──────────▶│                        │
+       │                        │                        │
+       │◀─── PREPARED ──────────│                        │
+       │                        │                        │
+       │──── PREPARE ─────────────────────────────────▶ │
+       │                        │                        │
+       │◀─── PREPARED ────────────────────────────────── │
+       │                        │                        │
+
+Phase 2: COMMIT (if all prepared)
+       │                        │                        │
+       │──── COMMIT ───────────▶│                        │
+       │                        │                        │
+       │◀─── COMMITTED ─────────│                        │
+       │                        │                        │
+       │──── COMMIT ──────────────────────────────────▶ │
+       │                        │                        │
+       │◀─── COMMITTED ───────────────────────────────── │
+       │                        │                        │
+```
+
+### Transaction States
+
+```
+┌─────────┐     BeginTransaction      ┌──────────┐
+│ (None)  │ ─────────────────────────▶│  Active  │
+└─────────┘                           └────┬─────┘
+                                           │
+                    ┌──────────────────────┼──────────────────────┐
+                    │                      │                      │
+                    ▼ CommitAsync          ▼ RollbackAsync        ▼ DisposeAsync
+              ┌───────────┐          ┌───────────┐          ┌───────────┐
+              │ Preparing │          │RolledBack │          │RolledBack │
+              └─────┬─────┘          └───────────┘          └───────────┘
+                    │
+        ┌───────────┼───────────┐
+        │ Success   │           │ Failure
+        ▼           │           ▼
+  ┌───────────┐     │     ┌───────────┐
+  │ Committed │     │     │  Failed   │
+  └───────────┘     │     └───────────┘
+                    │
+                    ▼ Partial Failure
+              ┌───────────┐
+              │Recovery   │
+              │ Needed    │
+              └───────────┘
+```
+
+### Component Responsibilities
+
+#### CrossShardTransactionCoordinator
+
+The central coordinator managing transaction lifecycle:
+
+```csharp
+public interface ICrossShardTransactionCoordinator
+{
+    ICrossShardTransaction? CurrentTransaction { get; }
+
+    Task<ICrossShardTransaction> BeginTransactionAsync(
+        CrossShardTransactionOptions? options = null,
+        CancellationToken ct = default);
+
+    Task ExecuteInTransactionAsync(
+        Func<ICrossShardTransaction, Task> action,
+        CrossShardTransactionOptions? options = null,
+        CancellationToken ct = default);
+
+    Task<int> RecoverAsync(CancellationToken ct = default);
+}
+```
+
+#### CrossShardTransaction
+
+Represents an active transaction with enlisted participants:
+
+```csharp
+public interface ICrossShardTransaction : IAsyncDisposable
+{
+    string TransactionId { get; }
+    TransactionState State { get; }
+    IReadOnlyCollection<string> EnlistedShards { get; }
+
+    Task EnlistAsync(string shardId, CancellationToken ct = default);
+    Task CommitAsync(CancellationToken ct = default);
+    Task RollbackAsync(CancellationToken ct = default);
+    ITransactionParticipant? GetParticipant(string shardId);
+}
+```
+
+#### TransactionParticipant
+
+Each enlisted shard has a participant managing its local transaction:
+
+```csharp
+public interface ITransactionParticipant
+{
+    string ShardId { get; }
+    DbContext Context { get; }
+    IDbContextTransaction? Transaction { get; }
+    ParticipantState State { get; }
+
+    Task PrepareAsync(CancellationToken ct = default);
+    Task CommitAsync(CancellationToken ct = default);
+    Task RollbackAsync(CancellationToken ct = default);
+}
+```
+
+### Transparent Integration
+
+The `TransparentShardingInterceptor` automatically handles cross-shard transactions:
+
+```csharp
+// When SaveChanges detects entities targeting multiple shards:
+// 1. Identifies all target shards
+// 2. If >1 shard and no explicit transaction:
+//    - Creates cross-shard transaction
+//    - Enlists all shards
+//    - Performs two-phase commit
+// 3. If explicit transaction active:
+//    - Skips automatic handling
+//    - Defers to application control
 ```
 
 ---

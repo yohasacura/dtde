@@ -7,6 +7,7 @@ Complete API reference for DTDE (Distributed Temporal Data Engine).
 - [DbContext Extensions](#dbcontext-extensions)
 - [Configuration API](#configuration-api)
 - [Query Methods](#query-methods)
+- [Cross-Shard Transactions](#cross-shard-transactions)
 - [Entity Configuration](#entity-configuration)
 - [Shard Configuration](#shard-configuration)
 
@@ -254,6 +255,252 @@ public DtdeOptionsBuilder SetDefaultTemporalContext(Func<DateTime> provider)
 **Example:**
 ```csharp
 dtde.SetDefaultTemporalContext(() => DateTime.UtcNow);
+```
+
+---
+
+## Cross-Shard Transactions
+
+### ICrossShardTransactionCoordinator
+
+Coordinates transactions that span multiple database shards.
+
+```csharp
+namespace Dtde.Abstractions.Transactions;
+
+public interface ICrossShardTransactionCoordinator
+```
+
+#### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `CurrentTransaction` | `ICrossShardTransaction?` | The active cross-shard transaction, if any |
+
+#### Methods
+
+##### BeginTransactionAsync
+
+Starts a new cross-shard transaction.
+
+```csharp
+Task<ICrossShardTransaction> BeginTransactionAsync(
+    CrossShardTransactionOptions? options = null,
+    CancellationToken cancellationToken = default)
+```
+
+**Parameters:**
+- `options` - Optional configuration for the transaction
+- `cancellationToken` - Cancellation token
+
+**Returns:** A new cross-shard transaction
+
+**Example:**
+```csharp
+await using var transaction = await coordinator.BeginTransactionAsync();
+await transaction.EnlistAsync("shard-eu");
+await transaction.EnlistAsync("shard-us");
+// Perform operations...
+await transaction.CommitAsync();
+```
+
+##### ExecuteInTransactionAsync
+
+Executes an action within a cross-shard transaction with automatic commit/rollback.
+
+```csharp
+Task ExecuteInTransactionAsync(
+    Func<ICrossShardTransaction, Task> action,
+    CrossShardTransactionOptions? options = null,
+    CancellationToken cancellationToken = default)
+```
+
+**Parameters:**
+- `action` - The action to execute within the transaction
+- `options` - Optional configuration
+- `cancellationToken` - Cancellation token
+
+**Example:**
+```csharp
+await coordinator.ExecuteInTransactionAsync(async tx =>
+{
+    await tx.EnlistAsync("shard-eu");
+    await tx.EnlistAsync("shard-us");
+
+    // Modify data in both shards
+    await context.SaveChangesAsync();
+});
+```
+
+##### ExecuteInTransactionAsync\<TResult\>
+
+Executes a function within a transaction and returns a result.
+
+```csharp
+Task<TResult> ExecuteInTransactionAsync<TResult>(
+    Func<ICrossShardTransaction, Task<TResult>> func,
+    CrossShardTransactionOptions? options = null,
+    CancellationToken cancellationToken = default)
+```
+
+##### RecoverAsync
+
+Recovers in-doubt transactions after a failure.
+
+```csharp
+Task<int> RecoverAsync(CancellationToken cancellationToken = default)
+```
+
+**Returns:** Number of transactions recovered
+
+---
+
+### ICrossShardTransaction
+
+Represents an active cross-shard transaction.
+
+```csharp
+namespace Dtde.Abstractions.Transactions;
+
+public interface ICrossShardTransaction : IAsyncDisposable
+```
+
+#### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `TransactionId` | `string` | Unique transaction identifier |
+| `State` | `TransactionState` | Current transaction state |
+| `IsolationLevel` | `CrossShardIsolationLevel` | Isolation level |
+| `Timeout` | `TimeSpan` | Transaction timeout |
+| `EnlistedShards` | `IReadOnlyCollection<string>` | Enlisted shard IDs |
+
+#### Methods
+
+##### EnlistAsync
+
+Enlists a shard in the transaction.
+
+```csharp
+Task EnlistAsync(string shardId, CancellationToken cancellationToken = default)
+```
+
+**Parameters:**
+- `shardId` - The shard ID to enlist
+
+**Example:**
+```csharp
+await transaction.EnlistAsync("shard-eu");
+```
+
+##### CommitAsync
+
+Commits the transaction using two-phase commit.
+
+```csharp
+Task CommitAsync(CancellationToken cancellationToken = default)
+```
+
+##### RollbackAsync
+
+Rolls back the transaction on all enlisted shards.
+
+```csharp
+Task RollbackAsync(CancellationToken cancellationToken = default)
+```
+
+##### GetParticipant
+
+Gets a transaction participant for a specific shard.
+
+```csharp
+ITransactionParticipant? GetParticipant(string shardId)
+```
+
+---
+
+### CrossShardTransactionOptions
+
+Configuration options for cross-shard transactions.
+
+```csharp
+namespace Dtde.Abstractions.Transactions;
+
+public class CrossShardTransactionOptions
+```
+
+#### Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Timeout` | `TimeSpan` | 30 seconds | Transaction timeout |
+| `IsolationLevel` | `CrossShardIsolationLevel` | `ReadCommitted` | Isolation level |
+| `EnableRetry` | `bool` | `true` | Enable automatic retry |
+| `MaxRetryAttempts` | `int` | `3` | Maximum retry attempts |
+| `RetryDelay` | `TimeSpan` | 100ms | Initial retry delay |
+| `UseExponentialBackoff` | `bool` | `true` | Use exponential backoff |
+| `MaxRetryDelay` | `TimeSpan` | 10 seconds | Maximum retry delay |
+| `TransactionName` | `string?` | `null` | Optional name for logging |
+| `EnableRecovery` | `bool` | `false` | Enable transaction recovery |
+
+#### Static Presets
+
+```csharp
+// Default settings
+public static CrossShardTransactionOptions Default { get; }
+
+// Short-lived: 10s timeout, 2 retries, no recovery
+public static CrossShardTransactionOptions ShortLived { get; }
+
+// Long-running: 5min timeout, 5 retries, recovery enabled
+public static CrossShardTransactionOptions LongRunning { get; }
+```
+
+**Example:**
+```csharp
+var options = new CrossShardTransactionOptions
+{
+    Timeout = TimeSpan.FromMinutes(2),
+    IsolationLevel = CrossShardIsolationLevel.Serializable,
+    TransactionName = "FundsTransfer"
+};
+
+await coordinator.ExecuteInTransactionAsync(async tx =>
+{
+    // Operations
+}, options);
+```
+
+---
+
+### TransactionState
+
+Enum representing transaction states.
+
+```csharp
+public enum TransactionState
+{
+    Active,       // Transaction is open
+    Preparing,    // Two-phase commit in progress
+    Committed,    // Successfully committed
+    RolledBack,   // Rolled back
+    Failed        // Failed during commit
+}
+```
+
+### CrossShardIsolationLevel
+
+Isolation levels for cross-shard transactions.
+
+```csharp
+public enum CrossShardIsolationLevel
+{
+    ReadUncommitted,
+    ReadCommitted,
+    RepeatableRead,
+    Serializable,
+    Snapshot
+}
 ```
 
 ---

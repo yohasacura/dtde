@@ -267,3 +267,129 @@ GET {{baseUrl}}/api/audits/recent?limit=50
 GET {{baseUrl}}/api/audits/stats/distribution
 
 ###
+
+### ============================================
+### CROSS-SHARD TRANSACTIONS - Transparent Handling
+### ============================================
+### These examples demonstrate DTDE's transparent cross-shard transaction support.
+### Regular EF Core SaveChangesAsync() and explicit transactions work seamlessly
+### across multiple shards without any special code.
+
+### --- Transparent SaveChanges (No Explicit Transaction) ---
+
+### Create accounts in multiple regions atomically (single SaveChanges)
+### This creates accounts in EU, US, and APAC regional shards in one atomic operation
+POST {{baseUrl}}/api/cross-shard-transactions/accounts/multi-region
+Content-Type: application/json
+
+{
+  "holderId": "holder-global-001",
+  "accounts": [
+    {
+      "region": "EU",
+      "accountType": "Checking",
+      "currency": "EUR",
+      "initialDeposit": 10000.00
+    },
+    {
+      "region": "US",
+      "accountType": "Savings",
+      "currency": "USD",
+      "initialDeposit": 25000.00
+    },
+    {
+      "region": "APAC",
+      "accountType": "Investment",
+      "currency": "JPY",
+      "initialDeposit": 5000000.00
+    }
+  ]
+}
+
+###
+
+### Cross-region fund transfer (EU -> US)
+### Updates accounts in different regional shards + creates transaction records
+### All in one SaveChanges - DTDE coordinates automatically
+POST {{baseUrl}}/api/cross-shard-transactions/transfer
+Content-Type: application/json
+
+{
+  "sourceAccountNumber": "{euAccountNumber}",
+  "destinationAccountNumber": "{usAccountNumber}",
+  "amount": 1000.00,
+  "description": "Cross-border transfer"
+}
+
+###
+
+### --- Explicit Transactions (Also Transparent) ---
+
+### Batch operations with explicit transaction
+### Multiple SaveChanges within one transaction across regional + date + hash shards
+POST {{baseUrl}}/api/cross-shard-transactions/batch-operations
+Content-Type: application/json
+
+{
+  "accountsToCreate": [
+    {
+      "region": "EU",
+      "accountType": "Business",
+      "currency": "EUR",
+      "initialDeposit": 50000.00,
+      "holderId": "business-eu-001"
+    },
+    {
+      "region": "US",
+      "accountType": "Business",
+      "currency": "USD",
+      "initialDeposit": 75000.00,
+      "holderId": "business-us-001"
+    }
+  ],
+  "transactionsToCreate": [
+    {
+      "accountNumber": "{existingAccountNumber}",
+      "amount": 5000.00,
+      "description": "Batch deposit"
+    }
+  ],
+  "performedBy": "batch-system"
+}
+
+###
+
+### Test cross-shard rollback (shouldFail: false = commit)
+POST {{baseUrl}}/api/cross-shard-transactions/test-rollback
+Content-Type: application/json
+
+{
+  "holderId": "rollback-test-001",
+  "shouldFail": false
+}
+
+###
+
+### Test cross-shard rollback (shouldFail: true = rollback)
+### This will create entities across shards, then rollback all of them
+POST {{baseUrl}}/api/cross-shard-transactions/test-rollback
+Content-Type: application/json
+
+{
+  "holderId": "rollback-test-002",
+  "shouldFail": true
+}
+
+###
+
+### --- Cross-Shard Queries ---
+
+### Get global account summary (queries all regional shards)
+GET {{baseUrl}}/api/cross-shard-transactions/accounts/global
+
+###
+
+### Get customer portfolio (spans regional + date shards)
+GET {{baseUrl}}/api/cross-shard-transactions/portfolio/holder-global-001
+
+###

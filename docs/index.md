@@ -60,9 +60,10 @@ var historicalOrders = await db.ValidAt<Order>(new DateTime(2024, 1, 15))
 |---------|-------------|
 | :material-database-cog: **Transparent Sharding** | Distribute data across tables or databases invisibly |
 | :material-clock-outline: **Temporal Versioning** | Track entity history with point-in-time queries |
+| :material-swap-horizontal: **Cross-Shard Transactions** | ACID transactions across multiple database shards |
 | :material-cog: **Property Agnostic** | Use ANY property names for sharding and temporal boundaries |
 | :material-microsoft-visual-studio: **EF Core Native** | Works with standard LINQ - no special query syntax |
-| :material-test-tube: **Fully Tested** | 100+ unit and integration tests |
+| :material-test-tube: **Fully Tested** | 400+ unit and integration tests |
 
 ## Installation
 

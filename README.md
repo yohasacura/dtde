@@ -7,7 +7,7 @@
 [![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%209.0%20%7C%2010.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
 [![EF Core](https://img.shields.io/badge/EF%20Core-8.0%20%7C%209.0%20%7C%2010.0-512BD4?style=flat-square)](https://docs.microsoft.com/ef/core/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-101%20passing-success?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-403%20passing-success?style=flat-square)](tests/)
 [![GitHub](https://img.shields.io/badge/GitHub-yohasacura%2Fdtde-181717?style=flat-square&logo=github)](https://github.com/yohasacura/dtde)
 
 [📚 Documentation](https://yohasacura.github.io/dtde/) · [🚀 Quick Start](#-quick-start) · [💡 Samples](samples/) · [📊 Benchmarks](#-performance-benchmarks)
@@ -40,11 +40,12 @@ var ordersLastMonth = await db.ValidAt<Order>(DateTime.Today.AddMonths(-1))
 |---------|-------------|
 | 🔀 **Transparent Sharding** | Distribute data across tables or databases invisibly |
 | ⏱️ **Temporal Versioning** | Track entity history with point-in-time queries |
+| 🔗 **Cross-Shard Transactions** | ACID transactions spanning multiple database shards |
 | 🎯 **Property Agnostic** | Use ANY property names for sharding keys and temporal boundaries |
 | 📝 **EF Core Native** | Works with standard LINQ — no special query syntax required |
 | ⚡ **Multiple Strategies** | Date-based, hash-based, range-based, or composite sharding |
 | 🗄️ **Hot/Warm/Cold Tiers** | Support for data tiering across storage tiers |
-| ✅ **Fully Tested** | 100+ unit and integration tests |
+| ✅ **Fully Tested** | 400+ unit and integration tests |
 
 ---
 

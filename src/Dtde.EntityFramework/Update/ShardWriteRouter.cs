@@ -30,6 +30,11 @@ public sealed class ShardWriteRouter
     }
 
     /// <summary>
+    /// Gets the shard registry.
+    /// </summary>
+    public IShardRegistry ShardRegistry => _shardRegistry;
+
+    /// <summary>
     /// Determines which shard should store the given entity.
     /// </summary>
     /// <typeparam name="TEntity">The entity type.</typeparam>

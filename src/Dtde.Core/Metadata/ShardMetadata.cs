@@ -294,7 +294,7 @@ public sealed class ShardMetadataBuilder
             throw new InvalidOperationException("ConnectionString is required for database sharding.");
         }
 
-        if ((_storageMode == ShardStorageMode.Tables || _storageMode == ShardStorageMode.Manual) 
+        if ((_storageMode == ShardStorageMode.Tables || _storageMode == ShardStorageMode.Manual)
             && string.IsNullOrWhiteSpace(_tableName))
         {
             throw new InvalidOperationException("TableName is required for table-based sharding.");

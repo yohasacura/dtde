@@ -130,6 +130,7 @@ nav:
   - Feature Guides:
     - Sharding Guide: guides/sharding-guide.md
     - Temporal Guide: guides/temporal-guide.md
+    - Cross-Shard Transactions: guides/cross-shard-transactions.md
 
   - Reference:
     - wiki/index.md

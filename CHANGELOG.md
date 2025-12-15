@@ -7,6 +7,32 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added
+
+- **Cross-Shard Transactions**
+  - Two-phase commit (2PC) protocol for ACID transactions across multiple shards
+  - `ICrossShardTransactionCoordinator` interface for managing transaction lifecycle
+  - `ICrossShardTransaction` interface representing active transactions
+  - `CrossShardTransactionOptions` with preset configurations (Default, ShortLived, LongRunning)
+  - `TransparentShardingInterceptor` for automatic EF Core integration
+  - Multiple isolation levels: ReadUncommitted, ReadCommitted, RepeatableRead, Serializable, Snapshot
+  - Transaction states: Active, Preparing, Committed, RolledBack, Failed
+  - Automatic rollback on failures with comprehensive error handling
+
+- **Documentation**
+  - Cross-shard transactions guide with usage examples
+  - Updated API reference with transaction classes
+  - Updated architecture documentation with 2PC protocol diagrams
+
+### Changed
+
+- Improved `TransparentShardingInterceptor` to use scoped service resolution
+- Updated test count to 403 tests (292 Core + 21 Integration + 90 EntityFramework)
+
+### Fixed
+
+- Fixed scoped service resolution in `TransparentShardingInterceptor` for proper DI lifecycle
+
 ## [1.0.0]
 
 ### Added
@@ -50,7 +76,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 - **Testing**
   - Comprehensive unit tests for Core and EntityFramework
   - Integration tests with in-memory database
-  - 101 tests passing
+  - Cross-shard transaction tests with 2PC verification
+  - 403 tests passing
 
 - **CI/CD**
   - GitHub Actions workflows for CI, CodeQL, benchmarks
