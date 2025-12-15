@@ -91,7 +91,68 @@ Evaluates parallel access performance.
 **Parallel Tasks:** 4 | 8 | 16 threads
 **Record Counts:** 10,000 | 50,000 records
 
+### 7. Cross-Shard Transactions (`CrossShardTransactionBenchmarks`)
+Compares single-shard vs cross-shard transaction overhead.
+
+**Test Categories:**
+- **BatchInsert**: Single vs multi-shard batch inserts
+- **BatchUpdate**: Single vs multi-shard batch updates
+- **WriteOverhead**: Measuring sharding write overhead
+- **MixedWorkload**: Read-heavy vs write-heavy workloads
+- **ShardAwareReads**: Shard-key vs non-shard-key queries
+- **BatchSizeImpact**: Impact of batch boundaries on cross-shard operations
+
+**Batch Sizes:** 10 | 50 records
+**Record Counts:** 1,000 records
+
+### 8. Date-Based Sharding (`DateShardingBenchmarks`)
+Evaluates time-series data performance with date-based sharding.
+
+**Test Categories:**
+- **SingleMonth**: Queries targeting a single monthly shard
+- **QuarterQuery**: Queries spanning 3 monthly shards
+- **FullYear**: Queries spanning all 12 monthly shards
+- **MonthlyAggregation**: Aggregations within date ranges
+- **AccountQuery**: Non-shard-key queries (scatter-gather)
+- **AccountDateRange**: Combined shard-key + date filtering
+- **Insert**: Insert performance for same vs multiple months
+- **RollingWindow**: Last 30/90 days rolling window queries
+- **YearOverYear**: Month-to-month comparison queries
+
+**Record Counts:** 50,000 | 100,000 records
+
 ## 🚀 Running the Benchmarks
+
+### Quick Mode (Faster Runs)
+
+For development and quick validation, use **quick mode** which reduces iterations and parameter combinations:
+
+```bash
+cd benchmarks/Dtde.Benchmarks
+
+# Using command line flag
+dotnet run -c Release -- --quick
+
+# Or using environment variable
+$env:DTDE_QUICK_BENCHMARK="1"
+dotnet run -c Release
+```
+
+**Quick mode reduces:**
+- Warmup iterations: 2 → 1
+- Benchmark iterations: 5 → 3
+- Parameter combinations (uses smallest values only)
+
+This can reduce total benchmark time by **60-80%** while still providing meaningful comparisons.
+
+### Full Mode (Accurate Results)
+
+For comprehensive benchmarks with full accuracy:
+
+```bash
+cd benchmarks/Dtde.Benchmarks
+dotnet run -c Release
+```
 
 ### Interactive Mode
 ```bash
@@ -99,7 +160,7 @@ cd benchmarks/Dtde.Benchmarks
 dotnet run -c Release
 ```
 
-Then select a benchmark suite (1-7).
+Then select a benchmark suite (1-9).
 
 ### Command Line
 ```bash

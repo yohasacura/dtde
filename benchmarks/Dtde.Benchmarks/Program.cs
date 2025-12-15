@@ -1,26 +1,15 @@
 using BenchmarkDotNet.Running;
-using BenchmarkDotNet.Configs;
-using BenchmarkDotNet.Exporters;
-using BenchmarkDotNet.Exporters.Csv;
-using BenchmarkDotNet.Jobs;
-using BenchmarkDotNet.Columns;
 using Dtde.Benchmarks;
 using Dtde.Benchmarks.Comparisons;
 
-// Configure and run benchmarks
-var config = DefaultConfig.Instance
-    .AddExporter(MarkdownExporter.GitHub)
-    .AddExporter(CsvExporter.Default)
-    .AddColumn(StatisticColumn.Mean)
-    .AddColumn(StatisticColumn.StdDev)
-    .AddColumn(StatisticColumn.Median)
-    .AddColumn(StatisticColumn.P95)
-    .AddColumn(StatisticColumn.OperationsPerSecond)
-    .WithOptions(ConfigOptions.DisableOptimizationsValidator);
+// Initialize benchmark configuration (handles --quick flag)
+BenchmarkConfig.Initialize(args);
+var config = BenchmarkConfig.GetConfig();
 
 Console.WriteLine("DTDE Comprehensive Benchmarks");
 Console.WriteLine("==============================");
 Console.WriteLine();
+BenchmarkConfig.PrintModeInfo();
 Console.WriteLine("Available benchmark suites:");
 Console.WriteLine("1. Single Table vs Sharded Table Comparison");
 Console.WriteLine("2. Indexed vs Non-Indexed Fields");
@@ -28,9 +17,13 @@ Console.WriteLine("3. Join and Include Operations");
 Console.WriteLine("4. Nested Properties and Navigation");
 Console.WriteLine("5. Write Operations (Insert/Update/Delete)");
 Console.WriteLine("6. Concurrent Access Patterns");
-Console.WriteLine("7. Run All Benchmarks");
+Console.WriteLine("7. Cross-Shard Transactions");
+Console.WriteLine("8. Date-Based Sharding");
+Console.WriteLine("9. Run All Benchmarks");
 Console.WriteLine();
-Console.Write("Select benchmark suite (1-7): ");
+Console.WriteLine("Tip: Add --quick flag for faster runs (reduced iterations/parameters)");
+Console.WriteLine();
+Console.Write("Select benchmark suite (1-9): ");
 
 var input = Console.ReadLine();
 if (int.TryParse(input, out var choice))
@@ -56,6 +49,12 @@ if (int.TryParse(input, out var choice))
             BenchmarkRunner.Run<ConcurrentAccessBenchmarks>(config);
             break;
         case 7:
+            BenchmarkRunner.Run<CrossShardTransactionBenchmarks>(config);
+            break;
+        case 8:
+            BenchmarkRunner.Run<DateShardingBenchmarks>(config);
+            break;
+        case 9:
             BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).RunAll(config);
             break;
         default:

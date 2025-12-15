@@ -16,7 +16,6 @@ namespace Dtde.Benchmarks.Comparisons;
 [RankColumn]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 [CategoriesColumn]
-[SimpleJob(warmupCount: 2, iterationCount: 5)]
 public class WriteOperationsBenchmarks
 {
     private SingleTableDbContext _singleContext = null!;
@@ -26,7 +25,9 @@ public class WriteOperationsBenchmarks
     private List<Customer> _customersToInsert = null!;
     private List<ShardedCustomer> _shardedCustomersToInsert = null!;
 
-    [Params(100, 1000, 5000)]
+    public static IEnumerable<int> BatchSizeSource => BenchmarkConfig.WriteOperationsRecordCounts;
+
+    [ParamsSource(nameof(BatchSizeSource))]
     public int BatchSize { get; set; }
 
     private int _iterationCount;

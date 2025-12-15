@@ -16,7 +16,6 @@ namespace Dtde.Benchmarks.Comparisons;
 [RankColumn]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 [CategoriesColumn]
-[SimpleJob(warmupCount: 2, iterationCount: 5)]
 public class JoinIncludeBenchmarks
 {
     private SingleTableDbContext _singleContext = null!;
@@ -32,7 +31,9 @@ public class JoinIncludeBenchmarks
     private List<OrderItem> _orderItems = null!;
     private List<ShardedOrderItem> _shardedOrderItems = null!;
 
-    [Params(5_000, 20_000)]
+    public static IEnumerable<int> CustomerCountSource => BenchmarkConfig.JoinIncludeRecordCounts;
+
+    [ParamsSource(nameof(CustomerCountSource))]
     public int CustomerCount { get; set; }
 
     [GlobalSetup]

@@ -16,7 +16,6 @@ namespace Dtde.Benchmarks.Comparisons;
 [RankColumn]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 [CategoriesColumn]
-[SimpleJob(warmupCount: 2, iterationCount: 5)]
 public class IndexedFieldsBenchmarks
 {
     private SingleTableDbContext _nonIndexedContext = null!;
@@ -27,7 +26,9 @@ public class IndexedFieldsBenchmarks
     private List<Customer> _customers = null!;
     private List<Transaction> _transactions = null!;
 
-    [Params(50_000, 100_000)]
+    public static IEnumerable<int> RecordCountSource => BenchmarkConfig.IndexedFieldsRecordCounts;
+
+    [ParamsSource(nameof(RecordCountSource))]
     public int RecordCount { get; set; }
 
     [GlobalSetup]

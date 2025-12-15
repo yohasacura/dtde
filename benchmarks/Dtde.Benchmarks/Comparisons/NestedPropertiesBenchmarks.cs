@@ -17,7 +17,6 @@ namespace Dtde.Benchmarks.Comparisons;
 [RankColumn]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 [CategoriesColumn]
-[SimpleJob(warmupCount: 2, iterationCount: 5)]
 public class NestedPropertiesBenchmarks
 {
     private SingleTableDbContext _singleContext = null!;
@@ -32,7 +31,9 @@ public class NestedPropertiesBenchmarks
     private List<ProductDetails> _productDetails = null!;
     private List<ShardedProductDetails> _shardedProductDetails = null!;
 
-    [Params(5_000, 10_000)]
+    public static IEnumerable<int> EntityCountSource => BenchmarkConfig.NestedPropertiesRecordCounts;
+
+    [ParamsSource(nameof(EntityCountSource))]
     public int EntityCount { get; set; }
 
     [GlobalSetup]

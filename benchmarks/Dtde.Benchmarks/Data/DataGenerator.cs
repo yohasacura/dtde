@@ -435,4 +435,54 @@ public static class DataGenerator
 
         return details;
     }
+
+    /// <summary>
+    /// Generates transactions within a specific date range for date-based sharding benchmarks.
+    /// </summary>
+    public static List<Transaction> GenerateTransactions(int count, DateTime startDate, DateTime endDate, int seed = 12345)
+    {
+        var refNumber = 0;
+        var faker = new Faker<Transaction>()
+            .UseSeed(seed)
+            .RuleFor(t => t.Id, f => f.IndexFaker + 1)
+            .RuleFor(t => t.TransactionRef, _ => $"TXN-{++refNumber:D10}")
+            .RuleFor(t => t.AccountNumber, f => $"ACC-{f.Random.Int(10000, 99999)}")
+            .RuleFor(t => t.TransactionDate, f => f.Date.Between(startDate, endDate))
+            .RuleFor(t => t.Amount, f => f.Finance.Amount(1, 10000))
+            .RuleFor(t => t.Type, f => f.PickRandom<TransactionType>())
+            .RuleFor(t => t.Description, f => f.Finance.TransactionType())
+            .RuleFor(t => t.Category, f => f.PickRandom(new[] { "Income", "Expense", "Transfer", "Fee" }))
+            .RuleFor(t => t.Merchant, f => f.Company.CompanyName())
+            .RuleFor(t => t.BalanceBefore, f => f.Finance.Amount(100, 50000))
+            .RuleFor(t => t.BalanceAfter, (f, t) => t.Type == TransactionType.Credit ? t.BalanceBefore + t.Amount : t.BalanceBefore - t.Amount)
+            .RuleFor(t => t.Status, _ => "Completed")
+            .RuleFor(t => t.CreatedAt, (f, t) => t.TransactionDate);
+
+        return faker.Generate(count);
+    }
+
+    /// <summary>
+    /// Generates sharded transactions within a specific date range.
+    /// </summary>
+    public static List<ShardedTransaction> GenerateShardedTransactions(int count, DateTime startDate, DateTime endDate, int seed = 12345)
+    {
+        var refNumber = 0;
+        var faker = new Faker<ShardedTransaction>()
+            .UseSeed(seed)
+            .RuleFor(t => t.Id, f => f.IndexFaker + 1)
+            .RuleFor(t => t.TransactionRef, _ => $"TXN-{++refNumber:D10}")
+            .RuleFor(t => t.AccountNumber, f => $"ACC-{f.Random.Int(10000, 99999)}")
+            .RuleFor(t => t.TransactionDate, f => f.Date.Between(startDate, endDate))
+            .RuleFor(t => t.Amount, f => f.Finance.Amount(1, 10000))
+            .RuleFor(t => t.Type, f => f.PickRandom<TransactionType>())
+            .RuleFor(t => t.Description, f => f.Finance.TransactionType())
+            .RuleFor(t => t.Category, f => f.PickRandom(new[] { "Income", "Expense", "Transfer", "Fee" }))
+            .RuleFor(t => t.Merchant, f => f.Company.CompanyName())
+            .RuleFor(t => t.BalanceBefore, f => f.Finance.Amount(100, 50000))
+            .RuleFor(t => t.BalanceAfter, (f, t) => t.Type == TransactionType.Credit ? t.BalanceBefore + t.Amount : t.BalanceBefore - t.Amount)
+            .RuleFor(t => t.Status, _ => "Completed")
+            .RuleFor(t => t.CreatedAt, (f, t) => t.TransactionDate);
+
+        return faker.Generate(count);
+    }
 }

@@ -16,7 +16,6 @@ namespace Dtde.Benchmarks.Comparisons;
 [RankColumn]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 [CategoriesColumn]
-[SimpleJob(warmupCount: 2, iterationCount: 5)]
 public class SingleVsShardedBenchmarks
 {
     private SingleTableDbContext _singleContext = null!;
@@ -29,7 +28,9 @@ public class SingleVsShardedBenchmarks
     private List<Transaction> _transactions = null!;
     private List<ShardedTransaction> _shardedTransactions = null!;
 
-    [Params(10_000, 50_000, 100_000)]
+    public static IEnumerable<int> RecordCountSource => BenchmarkConfig.SingleVsShardedRecordCounts;
+
+    [ParamsSource(nameof(RecordCountSource))]
     public int RecordCount { get; set; }
 
     [GlobalSetup]

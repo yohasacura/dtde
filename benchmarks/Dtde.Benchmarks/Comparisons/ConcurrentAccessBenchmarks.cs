@@ -17,7 +17,6 @@ namespace Dtde.Benchmarks.Comparisons;
 [RankColumn]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 [CategoriesColumn]
-[SimpleJob(warmupCount: 2, iterationCount: 5)]
 public class ConcurrentAccessBenchmarks
 {
     private DbContextOptions<SingleTableDbContext> _singleOptions = null!;
@@ -27,13 +26,17 @@ public class ConcurrentAccessBenchmarks
     private List<Customer> _customers = null!;
     private List<ShardedCustomer> _shardedCustomers = null!;
     private readonly string[] _regions = ["US", "EU", "APAC", "LATAM"];
-    
+
     private string _dbSuffix = null!;
 
-    [Params(4, 8)]
+    public static IEnumerable<int> ParallelTasksSource => BenchmarkConfig.ConcurrencyLevels;
+
+    [ParamsSource(nameof(ParallelTasksSource))]
     public int ParallelTasks { get; set; }
 
-    [Params(10_000)]
+    public static IEnumerable<int> RecordCountSource => BenchmarkConfig.ConcurrentAccessRecordCounts;
+
+    [ParamsSource(nameof(RecordCountSource))]
     public int RecordCount { get; set; }
 
     [GlobalSetup]
@@ -41,7 +44,7 @@ public class ConcurrentAccessBenchmarks
     {
         // Use unique suffix for each parameter combination to avoid conflicts
         _dbSuffix = $"{RecordCount}_{ParallelTasks}";
-        
+
         _singleOptions = new DbContextOptionsBuilder<SingleTableDbContext>()
             .UseSqlite($"Data Source=concurrent_single_{_dbSuffix}.db")
             .Options;
@@ -126,10 +129,10 @@ public class ConcurrentAccessBenchmarks
     {
         // Clear SQLite connection pool to release file handles
         SqliteConnection.ClearAllPools();
-        
+
         // Small delay to ensure connections are fully released
         Thread.Sleep(100);
-        
+
         try { File.Delete($"concurrent_single_{_dbSuffix}.db"); } catch { /* ignore */ }
         try { File.Delete($"concurrent_indexed_{_dbSuffix}.db"); } catch { /* ignore */ }
         try { File.Delete($"concurrent_sharded_{_dbSuffix}.db"); } catch { /* ignore */ }
