@@ -20,7 +20,7 @@
 
   <ItemGroup Label="Microsoft.Extensions" Condition="'$(TargetFramework)' == 'net8.0'">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.2" />
@@ -74,7 +74,7 @@
   </ItemGroup>
 
   <ItemGroup Label="ASP.NET Core">
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">
@@ -96,7 +96,7 @@
 
   <!-- Source Link - Best practice for NuGet packages -->
   <ItemGroup Label="SourceLink">
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.102" />
   </ItemGroup>
 
 </Project>
