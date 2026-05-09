@@ -13,6 +13,54 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 > The migration is straightforward (5-10 lines per project); see "Migrating
 > from 1.0.0" below. The next published version number is to be decided.
 
+### Samples and documentation refresh
+
+Two new samples covering the new feature areas, plus a full pass over
+the docs.
+
+**New samples:**
+
+- **`Dtde.Samples.Transactions`** — atomic cross-shard transfer,
+  savepoint partial rollback, read-after-write inside a transaction,
+  `FileBasedTransactionLog` + `RecoverAsync` on startup. Four endpoints,
+  one per concept.
+- **`Dtde.Samples.BulkOperations`** — `BulkInsertAsync`,
+  `BulkUpdateAsync`, `BulkDeleteAsync`, `ExecuteStreamingAsync`, plus a
+  custom `IBulkInsertProvider` that demonstrates the plug-in shape for
+  `SqlBulkCopy` / PG `COPY` / etc.
+
+**New guides:**
+
+- **[Bulk operations](docs/guides/bulk-operations.md)** — every bulk
+  API, custom provider chains, streaming, transaction interaction.
+- **[Transaction log and recovery](docs/guides/transaction-log-and-recovery.md)** —
+  durable lifecycle log, the 2PC recovery rule, operational hygiene.
+
+**Rewritten guides:**
+
+- **[Cross-shard transactions](docs/guides/cross-shard-transactions.md)** —
+  full coverage of the public surface: `BeginCrossShardTransactionAsync`,
+  savepoints, read-after-write, isolation levels, retry, recovery.
+- **[Sharding guide](docs/guides/sharding-guide.md)** — strategies,
+  storage modes, shard groups, qualified ids, routing rules.
+- **[Migration guide](docs/guides/migration-guide.md)** — fresh
+  five-step path from EF Core to DTDE; covers groups, transactions,
+  recovery, bulk migration of existing data.
+
+**Refreshed wiki:**
+
+- **[Architecture](docs/wiki/architecture.md)** — current three-project
+  layering, key abstractions, query/write/transaction request flows.
+- **[API reference](docs/wiki/api-reference.md)** — every public type
+  catalogued in one place.
+- **[Configuration](docs/wiki/configuration.md)** — every option on
+  `DtdeOptionsBuilder`, JSON shard-config schema.
+- **[Troubleshooting](docs/wiki/troubleshooting.md)** — current error
+  catalogue with concrete fixes.
+
+`docs/index.md` and `docs/guides/index.md` now reflect the full
+shipping surface.
+
 ### Bulk + query depth
 
 Three more capabilities completing the read/write story.

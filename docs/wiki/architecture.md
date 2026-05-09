@@ -1,661 +1,221 @@
 # Architecture
 
-This document describes the internal architecture of DTDE, its components, and how they interact.
+How DTDE is laid out internally — the three projects, the key
+abstractions, and how a query / write / transaction flows through the
+system.
 
-## Table of Contents
-
-- [System Overview](#system-overview)
-- [Core Components](#core-components)
-- [Query Pipeline](#query-pipeline)
-- [Update Pipeline](#update-pipeline)
-- [Cross-Shard Transactions](#cross-shard-transactions)
-- [Storage Modes](#storage-modes)
-- [Extension Points](#extension-points)
-
----
-
-## System Overview
-
-DTDE is designed as a set of extensions to Entity Framework Core that intercept queries and updates, routing them to appropriate shards transparently.
-
-### High-Level Architecture
+## Three projects, strict layering
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Application Layer                                  │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  // Standard EF Core LINQ - no shard-aware code needed              │   │
-│  │  var result = await db.Orders                                        │   │
-│  │      .Where(o => o.Region == "EU" && o.Status == "Pending")          │   │
-│  │      .OrderBy(o => o.OrderDate)                                      │   │
-│  │      .Take(10)                                                       │   │
-│  │      .ToListAsync();                                                 │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              DTDE NuGet Package                              │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐ │
-│  │ Metadata Layer  │  │  Query Engine   │  │      Update Engine          │ │
-│  │                 │  │                 │  │                             │ │
-│  │ • EntityMeta    │  │ • Shard Resolver│  │ • Shard Write Router        │ │
-│  │ • ShardMeta     │  │ • Query Planner │  │ • Version Manager           │ │
-│  │ • StrategyMeta  │  │ • Parallel Exec │  │ • Update Processor          │ │
-│  └────────┬────────┘  │ • Result Merger │  └──────────────┬──────────────┘ │
-│           │           └────────┬────────┘                 │                │
-│           │                    │                          │                │
-│  ┌────────┴────────────────────┴──────────────────────────┴────────────┐   │
-│  │                  Optional: Temporal Module                           │   │
-│  │  • ValidAt() / ValidBetween() / AllVersions()                        │   │
-│  │  • Version bump on update (if configured)                            │   │
-│  │  • Temporal Include for relationships                                │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                      EF Core Integration Layer                       │   │
-│  │  • DtdeOptionsExtension  • Service Replacements                      │   │
-│  │  • DtdeDbContext         • Expression Rewriting                      │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                    ┌─────────────────┴─────────────────┐
-                    ▼                                   ▼
-    ┌───────────────────────────────┐   ┌───────────────────────────────┐
-    │   Table Sharding (Same DB)    │   │  Database Sharding (Multi-DB) │
-    │  ┌───────┐ ┌───────┐ ┌─────┐ │   │  ┌───────┐ ┌───────┐ ┌─────┐ │
-    │  │Tbl_EU │ │Tbl_US │ │Tbl_X│ │   │  │ DB_EU │ │ DB_US │ │DB_X │ │
-    │  └───────┘ └───────┘ └─────┘ │   │  └───────┘ └───────┘ └─────┘ │
-    └───────────────────────────────┘   └───────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  Dtde.EntityFramework  ←  application code references  │
+│   (EF Core integration, DbContext, query rewriter,     │
+│    interceptors, bulk extensions)                       │
+└────────────────────┬───────────────────────────────────┘
+                     │
+┌────────────────────▼───────────────────────────────────┐
+│  Dtde.Core                                              │
+│   (sharding strategies, temporal context, cross-shard   │
+│    transaction coordinator, transaction log impls)      │
+└────────────────────┬───────────────────────────────────┘
+                     │
+┌────────────────────▼───────────────────────────────────┐
+│  Dtde.Abstractions                                      │
+│   (public interfaces — IShardMetadata,                  │
+│    IShardingStrategy, ICrossShardTransactionCoordinator,│
+│    ITransactionLog, IBulkInsertProvider, ...)           │
+└────────────────────────────────────────────────────────┘
 ```
 
-### Design Principles
+| Layer | Depends on | Purpose |
+|---|---|---|
+| `Dtde.Abstractions` | `Microsoft.Extensions.Logging.Abstractions` only | Public contract surface. Extension points for custom providers. |
+| `Dtde.Core` | `Dtde.Abstractions`, `Microsoft.EntityFrameworkCore` (no relational provider) | Default implementations of the abstractions. |
+| `Dtde.EntityFramework` | `Dtde.Core`, `Microsoft.EntityFrameworkCore.Relational` | EF Core integration: `DtdeDbContext`, model customizers, interceptors, public extension methods. |
 
-1. **Transparency**: Application code uses standard EF Core patterns
-2. **Property Agnostic**: No assumptions about field names
-3. **Sharding First**: Sharding is primary; temporal is optional
-4. **Extensibility**: Clean interfaces for custom implementations
-5. **Performance**: Parallel execution, minimal overhead
+Application developers reference **`Dtde.EntityFramework`** only.
 
----
+## Key abstractions
 
-## Core Components
+### Sharding
 
-### Package Structure
+| Type | What it does |
+|---|---|
+| `IShardMetadata` | Describes one physical shard — id, group, storage mode, connection string, table name pattern, tier, priority. |
+| `IShardGroup` | Named set of shards. Entities bind to a group via `UseShardGroup(name)`. |
+| `IShardGroupRegistry` | Top-level registry of groups. The default group is always present; `dtde.AddShards(...)` populates it. |
+| `IShardRegistry` | Flat union view across groups, keyed by fully-qualified id (`group::id` for named groups; just `id` for default-group shards). |
+| `IShardingStrategy` | Resolves a shard for a write or a query predicate. Three default impls: `PropertyBasedShardingStrategy`, `HashShardingStrategy(N)`, `DateRangeShardingStrategy`. |
+| `IShardingConfiguration` | Per-entity sharding configuration: strategy, key properties, storage mode, group binding. |
 
-```
-Dtde.Abstractions/          # Interfaces and contracts
-├── Metadata/
-│   ├── IEntityMetadata.cs
-│   ├── IShardMetadata.cs
-│   ├── IShardRegistry.cs
-│   ├── IShardingStrategy.cs
-│   └── IMetadataRegistry.cs
-└── Temporal/
-    └── ITemporalContext.cs
+### Temporal
 
-Dtde.Core/                  # Core implementations
-├── Metadata/
-│   ├── EntityMetadata.cs
-│   ├── ShardMetadata.cs
-│   ├── ShardRegistry.cs
-│   └── MetadataRegistry.cs
-├── Sharding/
-│   ├── PropertyBasedShardingStrategy.cs
-│   ├── HashShardingStrategy.cs
-│   └── DateRangeShardingStrategy.cs
-└── Temporal/
-    └── TemporalContext.cs
+| Type | What it does |
+|---|---|
+| `ITemporalConfiguration` | Per-entity validity-property configuration (`ValidFrom` / optional `ValidTo`). |
+| `ITemporalContext` | The `now` provider used by `ValidAt`, etc. Defaults to `DateTime.UtcNow`. |
 
-Dtde.EntityFramework/       # EF Core integration
-├── DtdeDbContext.cs
-├── Configuration/
-│   ├── DtdeOptions.cs
-│   └── DtdeOptionsBuilder.cs
-├── Extensions/
-│   ├── DbContextOptionsBuilderExtensions.cs
-│   ├── EntityTypeBuilderExtensions.cs
-│   └── QueryableExtensions.cs
-├── Query/
-│   ├── ShardedQueryExecutor.cs
-│   ├── ShardContextFactory.cs
-│   └── DtdeExpressionRewriter.cs
-├── Update/
-│   ├── ShardWriteRouter.cs
-│   ├── DtdeUpdateProcessor.cs
-│   └── VersionManager.cs
-└── Infrastructure/
-    └── DtdeOptionsExtension.cs
-```
+### Transactions
 
-### Component Responsibilities
+| Type | What it does |
+|---|---|
+| `ICrossShardTransactionCoordinator` | Begins, executes, recovers cross-shard transactions. Holds the `AsyncLocal<ICrossShardTransaction>` used by `CurrentTransaction`. |
+| `ICrossShardTransaction` | A single 2PC scope. `EnlistAsync`, `CommitAsync`, `RollbackAsync`, `GetParticipant`. |
+| `ITransactionParticipant` | One shard's view of a cross-shard transaction. Owns its own local transaction; supports `PrepareAsync`, `CommitAsync`, `RollbackAsync`, `CreateSavepointAsync`, `RollbackToSavepointAsync`, `ReleaseSavepointAsync`. |
+| `ITransactionLog` | Durable record of lifecycle events for crash recovery. Two shipped impls: `InMemoryTransactionLog`, `FileBasedTransactionLog`. Plug in your own for production. |
 
-#### DtdeDbContext
+### Bulk operations
 
-Base class that extends `DbContext` with DTDE functionality:
+| Type | What it does |
+|---|---|
+| `IBulkInsertProvider` | Pluggable per-provider bulk insert. Default implementation uses `AddRangeAsync` + `SaveChangesAsync`. |
+| `BulkInsertProviderChain` | Resolves the providers in DI registration order with the default at the tail. |
 
-```csharp
-public abstract class DtdeDbContext : DbContext
-{
-    // Temporal query methods
-    public IQueryable<TEntity> ValidAt<TEntity>(DateTime asOfDate);
-    public IQueryable<TEntity> ValidBetween<TEntity>(DateTime start, DateTime end);
-    public IQueryable<TEntity> AllVersions<TEntity>();
-
-    // Registry access
-    public ITemporalContext TemporalContext { get; }
-    public IMetadataRegistry MetadataRegistry { get; }
-    public IShardRegistry ShardRegistry { get; }
-}
-```
-
-#### ShardedQueryExecutor
-
-Executes queries across multiple shards:
-
-```csharp
-public class ShardedQueryExecutor : IShardedQueryExecutor
-{
-    // Execute query across all relevant shards
-    Task<IReadOnlyList<T>> ExecuteAsync<T>(IQueryable<T> query, CancellationToken ct);
-
-    // Execute scalar aggregations
-    Task<TResult> ExecuteScalarAsync<T, TResult>(IQueryable<T> query,
-        Func<IEnumerable<TResult>, TResult> aggregator, CancellationToken ct);
-}
-```
-
-#### ShardWriteRouter
-
-Routes write operations to correct shards:
-
-```csharp
-public class ShardWriteRouter
-{
-    // Determine target shard for an entity
-    IShardMetadata ResolveTargetShard<T>(T entity);
-
-    // Route tracked changes to appropriate shards
-    void RouteChanges(IEnumerable<EntityEntry> entries);
-}
-```
-
-#### ShardRegistry
-
-Maintains collection of available shards:
-
-```csharp
-public interface IShardRegistry
-{
-    IReadOnlyList<IShardMetadata> GetAllShards();
-    IShardMetadata? GetShard(string shardId);
-    IEnumerable<IShardMetadata> GetShardsForDateRange(DateTime start, DateTime end);
-    IEnumerable<IShardMetadata> GetWritableShards();
-}
-```
-
----
-
-## Query Pipeline
-
-### Query Execution Flow
+## How a query flows
 
 ```
-┌─────────────────┐
-│  LINQ Query     │
-│  (IQueryable)   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Expression      │
-│ Analysis        │
-│ - Extract where │
-│ - Find shard key│
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Shard Resolution│
-│ - Match predicate│
-│ - Get target    │
-│   shards        │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Parallel        │
-│ Execution       │
-│ - Query each    │
-│   shard         │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Result Merging  │
-│ - Combine       │
-│ - Apply final   │
-│   operations    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Return Results  │
-└─────────────────┘
+db.Customers.Where(c => c.Region == "EU").ToListAsync()
+                       │
+                       ▼
+        DtdeExpressionRewriter (optional rewrite for temporal filters, etc.)
+                       │
+                       ▼
+        ShardedQueryExecutor.ExecuteAsync(query)
+                       │
+                       ▼
+        DetermineTargetShards(typeof(Customer), expression)
+            ├── Look up entity's IShardingConfiguration → group name
+            ├── Look up the group → IShardGroup
+            ├── Predicate-prune via the group's strategy
+            └── Return the matching IShardMetadata list
+                       │
+                       ▼
+        For each shard:
+            GetContextForShardAsync(shard)
+                ├── If an ambient cross-shard transaction is active
+                │   AND has a participant for this shard → reuse its context
+                │   (read-after-write); otherwise auto-enlist + reuse.
+                └── Else → IShardContextFactory.CreateContextAsync(shard)
+                       │
+                       ▼
+            Apply expression to the per-shard DbSet, ToListAsync().
+                       │
+                       ▼
+        Merge results, apply paging / ordering, return.
 ```
 
-### Shard Resolution
+`ExecuteStreamingAsync<T>` follows the same shape but runs the per-shard
+producers concurrently into a bounded `Channel<T>` and yields entities
+in arrival order via `IAsyncEnumerable<T>` — see
+[bulk operations](../guides/bulk-operations.md).
 
-The query executor analyzes the expression tree to determine which shards to query:
-
-```csharp
-// Optimized: Only queries EU shard
-db.Customers.Where(c => c.Region == "EU")
-// Shard resolution: [EU]
-
-// Optimized: Only queries 2024 shard
-db.Orders.Where(o => o.CreatedAt.Year == 2024)
-// Shard resolution: [2024]
-
-// Cross-shard: Queries all relevant shards
-db.Customers.Where(c => c.Name.Contains("Smith"))
-// Shard resolution: [EU, US, APAC, ...]
-```
-
-### Parallel Execution
-
-Queries execute in parallel with configurable concurrency:
-
-```csharp
-// Configuration
-options.UseDtde(dtde =>
-{
-    dtde.SetMaxParallelShards(10);  // Max concurrent queries
-});
-```
-
-### Result Merging
-
-Results are merged with proper handling of:
-- **Ordering**: Re-applies OrderBy across merged results
-- **Paging**: Applies Take/Skip to merged results
-- **Distinct**: Deduplicates across shards
-- **Aggregations**: Combines shard-level aggregates
-
----
-
-## Update Pipeline
-
-### Write Operation Flow
+## How a write flows
 
 ```
-┌─────────────────┐
-│ Entity Change   │
-│ (Add/Update/    │
-│  Delete)        │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Shard Key       │
-│ Extraction      │
-│ - Get property  │
-│ - Determine key │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Shard Resolution│
-│ - Find matching │
-│   shard         │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐     ┌─────────────────┐
-│ Temporal?       │ Yes │ Version         │
-│                 ├────►│ Management      │
-└────────┬────────┘     │ - Close old     │
-         │ No           │ - Create new    │
-         │              └────────┬────────┘
-         ▼                       │
-┌─────────────────┐              │
-│ Direct Write    │              │
-│ to Shard        │◄─────────────┘
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ SaveChanges     │
-└─────────────────┘
+db.Customers.Add(...) + db.SaveChangesAsync()
+                       │
+                       ▼
+        TransparentShardingInterceptor.SavingChangesAsync
+                       │
+                       ├── No sharded changes? → let EF's normal SaveChanges proceed.
+                       │
+                       └── Cross-shard? → group entries by target shard
+                                          (using ShardWriteRouter.DetermineTargetShard,
+                                          keyed by ToQualifiedId() for safety),
+                                          then run each group inside a
+                                          CrossShardTransaction.
 ```
 
-### Version Management
+`BulkInsertAsync` / `BulkUpdateAsync` / `BulkDeleteAsync` follow the
+same routing logic but bypass the change tracker — they call directly
+into `IBulkInsertProvider` (insert) or fan out
+`ExecuteUpdate/DeleteAsync` (update/delete).
 
-For temporal entities, updates create new versions:
-
-```csharp
-// Original record
-| Id | Amount | ValidFrom  | ValidTo |
-| 1  | 10000  | 2024-01-01 | NULL    |
-
-// After update:
-| Id | Amount | ValidFrom  | ValidTo    |
-| 1  | 10000  | 2024-01-01 | 2024-06-30 |  // Closed
-| 2  | 15000  | 2024-07-01 | NULL       |  // New version
-```
-
----
-
-## Cross-Shard Transactions
-
-DTDE provides two-phase commit (2PC) support for operations spanning multiple database shards.
-
-### Transaction Architecture
+## How a cross-shard transaction flows
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Application Layer                                  │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  await coordinator.ExecuteInTransactionAsync(async tx => {          │   │
-│  │      await tx.EnlistAsync("shard-eu");                               │   │
-│  │      await tx.EnlistAsync("shard-us");                               │   │
-│  │      // Modify data in both shards                                   │   │
-│  │      await context.SaveChangesAsync();                               │   │
-│  │  });                                                                 │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   CrossShardTransactionCoordinator                           │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐ │
-│  │  Transaction    │  │   Phase 1:      │  │      Phase 2:               │ │
-│  │  Lifecycle      │  │   PREPARE       │  │      COMMIT/ROLLBACK        │ │
-│  │  Management     │  │                 │  │                             │ │
-│  └────────┬────────┘  └────────┬────────┘  └──────────────┬──────────────┘ │
-│           │                    │                          │                │
-└───────────┼────────────────────┼──────────────────────────┼────────────────┘
-            │                    │                          │
-            ▼                    ▼                          ▼
-    ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
-    │  Shard EU     │    │  Shard US     │    │  Shard APAC   │
-    │  Participant  │    │  Participant  │    │  Participant  │
-    │  ┌─────────┐  │    │  ┌─────────┐  │    │  ┌─────────┐  │
-    │  │DbContext│  │    │  │DbContext│  │    │  │DbContext│  │
-    │  │   +     │  │    │  │   +     │  │    │  │   +     │  │
-    │  │ Tx      │  │    │  │ Tx      │  │    │  │ Tx      │  │
-    │  └─────────┘  │    │  └─────────┘  │    │  └─────────┘  │
-    └───────────────┘    └───────────────┘    └───────────────┘
+db.BeginCrossShardTransactionAsync(options)
+                       │
+                       ▼
+        CrossShardTransactionCoordinator.BeginTransactionAsync
+            ├── Generate transaction id.
+            ├── Construct CrossShardTransaction (with onDisposed callback
+            │   that clears the AsyncLocal slot).
+            ├── _currentTransaction.Value = transaction (synchronous).
+            ├── Record "Started" in the ITransactionLog (async).
+            └── Return the transaction.
+                       │
+                       ▼
+        User-driven enlistments + writes via participant.Context
+                       │
+                       ▼
+        CommitAsync()
+            ├── Single participant?  → single-shard fast path.
+            │                           PrepareAsync + CommitAsync on the participant.
+            │                           No 2PC overhead.
+            │
+            └── Multiple participants?
+                  ├── Phase 1 (Prepare):
+                  │      For each participant: SaveChanges inside its open transaction;
+                  │      record "Prepared" in the durable log.
+                  ├── Phase 2 (Commit):
+                  │      For each participant: commit its local transaction.
+                  └── Record "Committed" in the durable log.
+                       │
+                       ▼
+        DisposeAsync() — callback clears the AsyncLocal slot.
 ```
 
-### Two-Phase Commit Protocol
+If the coordinator process dies after Phase 1 but before Phase 2, the
+durable log still has all `Prepared` votes. On restart,
+`coordinator.RecoverAsync()` finds those in-doubt transactions and
+applies the classical 2PC rule: every participant prepared → resolve
+as committed; otherwise resolve as rolled back.
 
-```
-Phase 1: PREPARE
-┌─────────────┐          ┌─────────────┐          ┌─────────────┐
-│ Coordinator │          │  Shard EU   │          │  Shard US   │
-└──────┬──────┘          └──────┬──────┘          └──────┬──────┘
-       │                        │                        │
-       │──── PREPARE ──────────▶│                        │
-       │                        │                        │
-       │◀─── PREPARED ──────────│                        │
-       │                        │                        │
-       │──── PREPARE ─────────────────────────────────▶ │
-       │                        │                        │
-       │◀─── PREPARED ────────────────────────────────── │
-       │                        │                        │
+## Per-shard model materialisation
 
-Phase 2: COMMIT (if all prepared)
-       │                        │                        │
-       │──── COMMIT ───────────▶│                        │
-       │                        │                        │
-       │◀─── COMMITTED ─────────│                        │
-       │                        │                        │
-       │──── COMMIT ──────────────────────────────────▶ │
-       │                        │                        │
-       │◀─── COMMITTED ───────────────────────────────── │
-       │                        │                        │
-```
+Each per-shard `DbContext` has its own EF Core model — different tables
+(in table-mode) or different entity sets (in mixed-group setups). DTDE
+materialises these models via:
 
-### Transaction States
+1. **`DtdeOptionsExtension.WithActiveShard(shard)`** — clones the
+   options extension and tags it with the active shard.
+2. **`DtdeModelCacheKeyFactory`** — builds a cache key from
+   `(ContextType, ActiveShardGroup, ActiveShardId, StorageMode, DesignTime)`.
+   Two shards with the same local id in different groups produce
+   different models; the cache keeps them isolated.
+3. **`DtdeShardModelCustomizer`** — runs after the user's
+   `OnModelCreating`. For per-shard contexts:
+    - rewrites table names per the entity's pattern (`{Table}_{ShardId}`
+      by default);
+    - excludes out-of-group entities from the model so
+      `EnsureCreatedAsync`/`CreateTablesAsync` only provisions tables
+      that actually live on that shard.
+    - For the parent context, it validates that every entity's
+      declared shard group is registered, throwing immediately at
+      first-model-build time if not.
 
-```
-┌─────────┐     BeginTransaction      ┌──────────┐
-│ (None)  │ ─────────────────────────▶│  Active  │
-└─────────┘                           └────┬─────┘
-                                           │
-                    ┌──────────────────────┼──────────────────────┐
-                    │                      │                      │
-                    ▼ CommitAsync          ▼ RollbackAsync        ▼ DisposeAsync
-              ┌───────────┐          ┌───────────┐          ┌───────────┐
-              │ Preparing │          │RolledBack │          │RolledBack │
-              └─────┬─────┘          └───────────┘          └───────────┘
-                    │
-        ┌───────────┼───────────┐
-        │ Success   │           │ Failure
-        ▼           │           ▼
-  ┌───────────┐     │     ┌───────────┐
-  │ Committed │     │     │  Failed   │
-  └───────────┘     │     └───────────┘
-                    │
-                    ▼ Partial Failure
-              ┌───────────┐
-              │Recovery   │
-              │ Needed    │
-              └───────────┘
-```
+The `PerShardContextFactory<TContext>` brings it all together: takes an
+`IShardMetadata`, clones the options with `WithActiveShard(shard)`,
+calls the user-supplied `(db, conn) => db.UseSqlite(...)` callback
+with the shard's connection string, and `Activator.CreateInstance`s
+the user's `DbContext` subclass.
 
-### Component Responsibilities
+## Source-link / determinism / signing
 
-#### CrossShardTransactionCoordinator
+CI builds set `CI=true`, which activates:
 
-The central coordinator managing transaction lifecycle:
+- **Source Link** — debug symbols point back to the GitHub source.
+- **Deterministic builds** — bit-identical output for the same inputs.
+- **`PublicAPI.Shipped.txt` / `Unshipped.txt`** tracking — every public
+  symbol is listed; new ones must be added to `Unshipped.txt` first.
+- **Banned-API analyzer** — `String.GetHashCode`, `DateTime.Now`,
+  `Thread.Sleep`, etc. are forbidden. Sharding identity must be
+  deterministic; time must be UTC; blocking patterns are out.
 
-```csharp
-public interface ICrossShardTransactionCoordinator
-{
-    ICrossShardTransaction? CurrentTransaction { get; }
+## See also
 
-    Task<ICrossShardTransaction> BeginTransactionAsync(
-        CrossShardTransactionOptions? options = null,
-        CancellationToken ct = default);
-
-    Task ExecuteInTransactionAsync(
-        Func<ICrossShardTransaction, Task> action,
-        CrossShardTransactionOptions? options = null,
-        CancellationToken ct = default);
-
-    Task<int> RecoverAsync(CancellationToken ct = default);
-}
-```
-
-#### CrossShardTransaction
-
-Represents an active transaction with enlisted participants:
-
-```csharp
-public interface ICrossShardTransaction : IAsyncDisposable
-{
-    string TransactionId { get; }
-    TransactionState State { get; }
-    IReadOnlyCollection<string> EnlistedShards { get; }
-
-    Task EnlistAsync(string shardId, CancellationToken ct = default);
-    Task CommitAsync(CancellationToken ct = default);
-    Task RollbackAsync(CancellationToken ct = default);
-    ITransactionParticipant? GetParticipant(string shardId);
-}
-```
-
-#### TransactionParticipant
-
-Each enlisted shard has a participant managing its local transaction:
-
-```csharp
-public interface ITransactionParticipant
-{
-    string ShardId { get; }
-    DbContext Context { get; }
-    IDbContextTransaction? Transaction { get; }
-    ParticipantState State { get; }
-
-    Task PrepareAsync(CancellationToken ct = default);
-    Task CommitAsync(CancellationToken ct = default);
-    Task RollbackAsync(CancellationToken ct = default);
-}
-```
-
-### Transparent Integration
-
-The `TransparentShardingInterceptor` automatically handles cross-shard transactions:
-
-```csharp
-// When SaveChanges detects entities targeting multiple shards:
-// 1. Identifies all target shards
-// 2. If >1 shard and no explicit transaction:
-//    - Creates cross-shard transaction
-//    - Enlists all shards
-//    - Performs two-phase commit
-// 3. If explicit transaction active:
-//    - Skips automatic handling
-//    - Defers to application control
-```
-
----
-
-## Storage Modes
-
-### Table Sharding
-
-Multiple tables in the same database:
-
-```
-Database: MyAppDb
-├── Customers_EU
-├── Customers_US
-├── Customers_APAC
-├── Orders_2023
-├── Orders_2024
-└── Orders_2025
-```
-
-**Advantages:**
-- Single connection string
-- Simpler deployment
-- Easier transactions
-
-**Configuration:**
-```csharp
-entity.ShardBy(c => c.Region)
-      .WithStorageMode(ShardStorageMode.Tables);
-```
-
-### Database Sharding
-
-Separate databases (potentially on different servers):
-
-```
-Server: EU-Server
-└── Database: MyAppEU
-    └── Customers
-
-Server: US-Server
-└── Database: MyAppUS
-    └── Customers
-
-Server: APAC-Server
-└── Database: MyAppAPAC
-    └── Customers
-```
-
-**Advantages:**
-- True horizontal scaling
-- Data isolation
-- Geographic distribution
-
-**Configuration:**
-```csharp
-entity.ShardBy(c => c.Region)
-      .WithStorageMode(ShardStorageMode.Databases);
-
-dtde.AddShard(s => s
-    .WithId("EU")
-    .WithConnectionString("Server=EU-Server;Database=MyAppEU;..."));
-```
-
----
-
-## Extension Points
-
-### Custom Sharding Strategy
-
-Implement `IShardingStrategy` for custom logic:
-
-```csharp
-public interface IShardingStrategy
-{
-    string StrategyType { get; }
-    IEnumerable<IShardMetadata> ResolveShards(Expression predicate, IShardRegistry registry);
-    IShardMetadata ResolveWriteShard(object entity, IShardRegistry registry);
-}
-```
-
-### Custom Shard Context Factory
-
-Implement `IShardContextFactory` for custom DbContext creation:
-
-```csharp
-public interface IShardContextFactory
-{
-    Task<DbContext> CreateContextAsync(IShardMetadata shard, CancellationToken ct);
-}
-```
-
-### Custom Expression Rewriter
-
-Implement `IExpressionRewriter` for custom query transformation:
-
-```csharp
-public interface IExpressionRewriter
-{
-    Expression Rewrite(Expression expression, IShardMetadata shard);
-}
-```
-
----
-
-## Performance Considerations
-
-### Query Optimization
-
-1. **Shard Pruning**: Include shard key in WHERE clauses
-2. **Parallel Limits**: Configure `MaxParallelShards` appropriately
-3. **Index Strategy**: Index shard key columns
-
-### Memory Management
-
-1. **Streaming**: Use `AsAsyncEnumerable()` for large result sets
-2. **Pagination**: Implement proper paging for large datasets
-3. **Projection**: Use `Select()` to reduce data transfer
-
-### Connection Pooling
-
-For database sharding, each database has its own connection pool:
-
-```csharp
-// Configure per-shard connection pooling
-dtde.AddShard(s => s
-    .WithConnectionString("...;Max Pool Size=100;..."));
-```
-
----
-
-## Next Steps
-
-- [API Reference](api-reference.md) - Complete API documentation
-- [Configuration](configuration.md) - Configuration options
-- [Classes Reference](classes-reference.md) - Detailed class docs
-
----
-
-[← Back to Wiki](index.md) | [API Reference →](api-reference.md)
+- [API reference](api-reference.md) — public type catalogue.
+- [Configuration](configuration.md) — every option on `DtdeOptionsBuilder`.
+- [Sharding guide](../guides/sharding-guide.md) — strategies, storage modes, groups.
+- [Cross-shard transactions](../guides/cross-shard-transactions.md) — full transaction lifecycle.

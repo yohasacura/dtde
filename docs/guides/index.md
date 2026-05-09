@@ -1,97 +1,39 @@
 # Guides
 
-Welcome to the DTDE guides! This section contains tutorials to help you get started and become productive with DTDE.
+Topic-by-topic walk-throughs of every shipping DTDE feature.
 
----
+## Start here
 
-## Learning Path
+| Guide | What it covers | Time |
+|---|---|---|
+| **[Getting started](getting-started.md)** | Sharded `DbContext`, three logical shards, table/database/mixed mode, working LINQ query — end to end. | 5 min |
 
-Follow this recommended path to learn DTDE:
+## Sharding
 
-```mermaid
-graph LR
-    A[Quick Start] --> B[Getting Started]
-    B --> C{Choose Focus}
-    C --> D[Sharding Guide]
-    C --> E[Temporal Guide]
-    D --> F[Migration Guide]
-    E --> F
-```
+| Guide | What it covers |
+|---|---|
+| **[Sharding guide](sharding-guide.md)** | All four strategies (`ShardBy`, `ShardByHash`, `ShardByDate`, `UseManualSharding`), the three storage modes, **shard groups** for per-entity topologies, and routing rules. |
+| **[Temporal guide](temporal-guide.md)** | Bi-temporal entities, `ValidAt<T>(date)`, `AllVersions<T>()`, point-in-time queries. |
 
----
+## Transactions and bulk operations
 
-## Guide Overview
+| Guide | What it covers |
+|---|---|
+| **[Cross-shard transactions](cross-shard-transactions.md)** | `BeginCrossShardTransactionAsync`, the 2PC protocol, savepoints, read-after-write inside a transaction, isolation levels, retry policy. |
+| **[Bulk operations](bulk-operations.md)** | `BulkInsertAsync`, `BulkUpdateAsync`, `BulkDeleteAsync`, `ExecuteStreamingAsync`, pluggable `IBulkInsertProvider` (SqlBulkCopy / PG COPY / etc.). |
+| **[Transaction log and recovery](transaction-log-and-recovery.md)** | `ITransactionLog`, `FileBasedTransactionLog`, `coordinator.RecoverAsync()`, the 2PC recovery rule. |
 
-| Guide | Description | Time | Level |
-|-------|-------------|------|-------|
-| [**Quick Start**](quickstart.md) | Minimal setup to get running | 5 min | Beginner |
-| [**Getting Started**](getting-started.md) | Complete introduction to DTDE | 20 min | Beginner |
-| [**Sharding Guide**](sharding-guide.md) | All sharding strategies in depth | 25 min | Intermediate |
-| [**Temporal Guide**](temporal-guide.md) | Point-in-time queries and versioning | 20 min | Intermediate |
-| [**Migration Guide**](migration-guide.md) | Migrate existing EF Core projects | 15 min | Intermediate |
+## Migration and reference
 
----
+| Guide | What it covers |
+|---|---|
+| **[Migration guide](migration-guide.md)** | Migrating an existing EF Core project to DTDE. |
+| **[API reference](../wiki/api-reference.md)** | Public type catalogue. |
+| **[Architecture](../wiki/architecture.md)** | Internal layering, the three projects, key abstractions. |
+| **[Configuration](../wiki/configuration.md)** | Every option on `DtdeOptionsBuilder`, JSON shard config schema. |
+| **[Troubleshooting](../wiki/troubleshooting.md)** | Common errors and fixes. |
 
-## Quick Start (5 minutes)
+## Samples
 
-The fastest way to get DTDE running:
-
-```csharp
-// 1. Inherit from DtdeDbContext
-public class AppDbContext : DtdeDbContext
-{
-    public DbSet<Customer> Customers => Set<Customer>();
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        base.OnModelCreating(modelBuilder);
-
-        // 2. Configure sharding
-        modelBuilder.Entity<Customer>()
-            .ShardBy(c => c.Region);
-    }
-}
-
-// 3. Register with UseDtde()
-services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(connectionString)
-           .UseDtde(dtde => dtde
-               .AddShard(s => s.WithId("EU").WithShardKeyValue("EU"))
-               .AddShard(s => s.WithId("US").WithShardKeyValue("US"))));
-```
-
-[:octicons-arrow-right-24: Full Quick Start](quickstart.md)
-
----
-
-## Choose Your Path
-
-### New to DTDE?
-
-1. **[Quick Start](quickstart.md)** - Get running in 5 minutes
-2. **[Getting Started](getting-started.md)** - Understand all the concepts
-3. **[Sharding Guide](sharding-guide.md)** or **[Temporal Guide](temporal-guide.md)** - Deep dive
-
-### Experienced with EF Core?
-
-1. **[Getting Started](getting-started.md)** - DTDE-specific concepts
-2. Jump directly to **[Sharding Guide](sharding-guide.md)** or **[Temporal Guide](temporal-guide.md)**
-
-### Migrating an Existing Project?
-
-1. **[Migration Guide](migration-guide.md)** - Step-by-step migration
-2. **[API Reference](../wiki/api-reference.md)** - Detailed API documentation
-
----
-
-## Related Documentation
-
-- **[API Reference](../wiki/api-reference.md)** - Complete API documentation
-- **[Configuration](../wiki/configuration.md)** - All configuration options
-- **[Architecture](../wiki/architecture.md)** - System design
-- **[Troubleshooting](../wiki/troubleshooting.md)** - Common issues and solutions
-- **[Samples](https://github.com/yohasacura/dtde/tree/main/samples)** - Working examples
-
----
-
-[← Back to Documentation](../index.md) | [Quick Start →](quickstart.md)
+Eight runnable Web API samples — one per concept. See
+[`samples/`](https://github.com/yohasacura/dtde/tree/main/samples).

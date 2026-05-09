@@ -1,327 +1,209 @@
-# Migration Guide
+# Migration guide
 
-This guide helps you migrate an existing Entity Framework Core application to use DTDE for sharding and optional temporal versioning.
+How to migrate an existing Entity Framework Core application to DTDE.
 
-## Table of Contents
+## Pre-flight check
 
-- [Prerequisites](#prerequisites)
-- [Migration Steps](#migration-steps)
-- [Database Migration](#database-migration)
-- [Code Changes](#code-changes)
-- [Testing Your Migration](#testing-your-migration)
-- [Rollback Strategy](#rollback-strategy)
+- [ ] You're on .NET 8 / 9 / 10.
+- [ ] Your `DbContext` inherits from `DbContext`.
+- [ ] You have a backup of production data and the ability to roll back.
+- [ ] You've read [Getting started](getting-started.md).
 
----
-
-## Prerequisites
-
-Before migrating:
-
-- [ ] .NET 8.0 / 9.0 / 10.0 SDK or later
-- [ ] Existing EF Core application
-- [ ] Understanding of your data access patterns
-- [ ] Backup of your production database
-
----
-
-## Migration Steps
-
-### Step 1: Install DTDE Package
+## Step 1 — Install
 
 ```bash
 dotnet add package Dtde.EntityFramework
 ```
 
-### Step 2: Update DbContext Base Class
+This transitively pulls in `Dtde.Core` and `Dtde.Abstractions`.
 
-Change from `DbContext` to `DtdeDbContext`:
+## Step 2 — Inherit from `DtdeDbContext`
 
-```csharp
-// Before
-public class AppDbContext : DbContext
+```diff
+- public class AppDbContext : DbContext
++ public class AppDbContext : DtdeDbContext
+  {
+      public AppDbContext(DbContextOptions<AppDbContext> options)
+          : base(options) { }
 
-// After
-public class AppDbContext : DtdeDbContext
+      public DbSet<Customer> Customers => Set<Customer>();
+  }
 ```
 
-### Step 3: Configure DTDE Services
+`DtdeDbContext` is a thin subclass of EF Core's `DbContext` — your
+existing model, migrations, and query patterns keep working unchanged.
 
-Update your service registration:
+## Step 3 — Switch DI registration
 
-```csharp
-// Before
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseSqlServer(connectionString);
-});
-
-// After
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseSqlServer(connectionString);
-    options.UseDtde();  // Add DTDE support
-});
+```diff
+- services.AddDbContext<AppDbContext>(options =>
+-     options.UseSqlServer(configuration.GetConnectionString("Default")));
++ services.AddDtdeDbContext<AppDbContext>(
++     (db, conn) => db.UseSqlServer(conn ?? configuration.GetConnectionString("Default")),
++     dtde => dtde.AddShards("EU", "US", "APAC"));
 ```
 
-### Step 4: Identify Sharding Candidates
+The provider callback is now `(db, conn) => ...`. DTDE invokes it with
+`conn = null` for the parent context (fall back to a default) and with
+the shard's connection for each per-shard context. Your existing
+`UseSqlServer(...)` / `UseSqlite(...)` / etc. call goes inside the
+callback.
 
-Review your entities and identify candidates for sharding:
+## Step 4 — Annotate sharded entities
 
-| Entity | Good Shard Key | Strategy |
-|--------|---------------|----------|
-| Orders | CreatedAt, Year | Date-based |
-| Customers | Region | Property-based |
-| Products | Category | Property-based |
-| Logs | Timestamp | Date-based |
-| Users | TenantId | Property-based |
+Inside `OnModelCreating`:
 
-### Step 5: Configure Entity Sharding
+```diff
+  protected override void OnModelCreating(ModelBuilder modelBuilder)
+  {
+      base.OnModelCreating(modelBuilder);
 
-Add sharding configuration to `OnModelCreating`:
+      modelBuilder.Entity<Customer>(entity =>
+      {
+          entity.HasKey(c => c.Id);
+          entity.Property(c => c.Region).HasMaxLength(10).IsRequired();
++         entity.ShardBy(c => c.Region);
+      });
+  }
+```
+
+`ShardBy` returns a fluent `ShardingBuilder<T>` for chaining
+(`.WithStorageMode(...)`, `.WithTablePattern(...)`, `.UseShardGroup(...)`,
+`.WithoutMigrations()`).
+
+## Step 5 — Provision shard tables
+
+For samples, dev environments, and integration tests:
 
 ```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder)
+using (var scope = app.Services.CreateScope())
 {
-    base.OnModelCreating(modelBuilder);
-
-    // Configure sharding for specific entities
-    modelBuilder.Entity<Order>(entity =>
-    {
-        entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Year);
-    });
-
-    // Non-sharded entities work as normal EF Core
-    modelBuilder.Entity<User>(entity =>
-    {
-        entity.HasKey(u => u.Id);
-        // No sharding - works like standard EF Core
-    });
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.EnsureAllShardsCreatedAsync();
 }
 ```
 
----
+For production, use EF Core migrations against each shard's connection
+manually. (Per-shard migrations as a first-class feature isn't yet
+shipped.)
 
-## Database Migration
+## Step 6 — Verify
 
-### Option A: New Tables (Recommended for New Data)
+Run your existing query workload. Standard LINQ continues to work; DTDE
+prunes `Where(... shard-key ...)` queries to the matching shard, fans
+the rest out across all shards, and merges results.
 
-1. Create new sharded tables:
+## Migrating existing data
+
+Two paths:
+
+### A. Read-and-rewrite (small datasets)
+
+```csharp
+// Read everything from the legacy table.
+var existing = await legacyDb.Customers.ToListAsync();
+
+// Bulk-insert into DTDE — entities route to their target shard automatically.
+await dtdeDb.BulkInsertAsync(existing);
+```
+
+### B. SQL-level rewrite (large datasets)
+
+For tables too big to fit in memory, write a one-shot `INSERT ... SELECT`
+migration script per target shard:
 
 ```sql
--- Create sharded tables for Orders
-CREATE TABLE Orders_2024 (
-    Id INT IDENTITY PRIMARY KEY,
-    CustomerId INT NOT NULL,
-    Amount DECIMAL(18,2),
-    CreatedAt DATETIME2,
-    -- ... other columns
-);
-
-CREATE TABLE Orders_2025 (
-    Id INT IDENTITY PRIMARY KEY,
-    CustomerId INT NOT NULL,
-    Amount DECIMAL(18,2),
-    CreatedAt DATETIME2,
-    -- ... other columns
-);
+-- Run once per region.
+INSERT INTO Customers_EU (Id, Name, Region, ...)
+SELECT Id, Name, Region, ... FROM Customers_legacy
+WHERE Region = 'EU';
 ```
 
-2. Configure DTDE to use these tables:
+Then drop the legacy table.
+
+## Adding shard groups for mixed strategies
+
+If your application has two entities with **different** shard
+topologies — say users hashed into 8 buckets *and* orders bucketed by
+year — bind each to a named group:
 
 ```csharp
-options.UseDtde(dtde =>
-{
-    dtde.AddShard(s => s
-        .WithId("2024")
-        .WithTable("Orders_2024", "dbo")
-        .WithDateRange(new DateTime(2024, 1, 1), new DateTime(2024, 12, 31)));
+// Program.cs
+dtde => dtde
+    .AddShardGroup("hash8", g => g.AddShards("0","1","2","3","4","5","6","7"))
+    .AddShardGroup("years", g => g.AddShards("2023","2024","2025"));
 
-    dtde.AddShard(s => s
-        .WithId("2025")
-        .WithTable("Orders_2025", "dbo")
-        .WithDateRange(new DateTime(2025, 1, 1), new DateTime(2025, 12, 31)));
-});
+// OnModelCreating
+modelBuilder.Entity<UserProfile>().ShardByHash(u => u.UserId, 8).UseShardGroup("hash8");
+modelBuilder.Entity<Order>().ShardByDate(o => o.OrderDate).UseShardGroup("years");
 ```
 
-### Option B: Migrate Existing Data
+If you don't call `AddShardGroup` and don't call `UseShardGroup`,
+everything goes into the implicit default group — the simple case stays
+configuration-free.
 
-1. Create sharded tables
-2. Migrate data:
+## Adding cross-shard transactions
 
-```sql
--- Migrate 2024 data
-INSERT INTO Orders_2024
-SELECT * FROM Orders
-WHERE YEAR(CreatedAt) = 2024;
-
--- Migrate 2025 data
-INSERT INTO Orders_2025
-SELECT * FROM Orders
-WHERE YEAR(CreatedAt) = 2025;
-```
-
-3. Verify data integrity
-4. Archive or drop original table
-
-### Option C: Keep Original Table as Default Shard
-
-Use existing table as a "catch-all" shard:
+`SaveChangesAsync` auto-promotes to a cross-shard transaction
+automatically when changes span multiple shards — nothing to migrate.
+For explicit control:
 
 ```csharp
-dtde.AddShard(s => s
-    .WithId("default")
-    .WithTable("Orders", "dbo")
-    .WithPriority(0));  // Lowest priority, used as fallback
+await using var tx = await db.BeginCrossShardTransactionAsync();
+
+// ... writes ...
+
+await tx.CommitAsync();
 ```
 
----
+See [cross-shard transactions](cross-shard-transactions.md).
 
-## Code Changes
+## Adding crash recovery
 
-### Repository Pattern (If Used)
-
-Your repositories require minimal changes:
+Default in-memory log doesn't survive process restarts. For durable
+recovery:
 
 ```csharp
-// Before and After - no changes needed!
-public class OrderRepository : IOrderRepository
-{
-    private readonly AppDbContext _context;
+services.AddSingleton<ITransactionLog>(_ =>
+    new FileBasedTransactionLog("/var/dtde/tx-log.jsonl"));
 
-    public async Task<List<Order>> GetRecentOrdersAsync()
-    {
-        // This query works the same way
-        // DTDE transparently handles sharding
-        return await _context.Orders
-            .Where(o => o.CreatedAt >= DateTime.Today.AddDays(-30))
-            .ToListAsync();
-    }
-}
+services.AddDtdeDbContext<AppDbContext>(...);
 ```
 
-### Direct DbContext Usage
-
-Same behavior - no changes needed:
+On startup, before accepting traffic:
 
 ```csharp
-// Works exactly the same
-var orders = await _context.Orders
-    .Where(o => o.CustomerId == customerId)
-    .ToListAsync();
+var coordinator = scope.ServiceProvider.GetRequiredService<ICrossShardTransactionCoordinator>();
+await coordinator.RecoverAsync();
 ```
 
-### Adding Temporal Queries (Optional)
+See [transaction log and recovery](transaction-log-and-recovery.md).
 
-If adding temporal versioning:
+## Rollback
 
-```csharp
-// New capability: point-in-time queries
-var historicalOrders = await _context.ValidAt<Order>(lastYearDate)
-    .ToListAsync();
-```
+DTDE only intercepts at the DbContext layer. To roll back:
 
----
+1. Revert the `DtdeDbContext` base back to `DbContext`.
+2. Revert the `AddDtdeDbContext` call back to `AddDbContext`.
+3. Remove the `ShardBy*` annotations from `OnModelCreating`.
+4. Optionally consolidate the per-shard tables back into a single table.
 
-## Testing Your Migration
+The DTDE NuGet packages can stay installed without effect — nothing in
+DTDE runs unless `AddDtdeDbContext` is called.
 
-### 1. Unit Tests
+## What didn't change
 
-Existing unit tests should continue to work with mock contexts.
+- Your entities. Add a `Region` (or whatever shard-key) property if
+  you don't already have one.
+- Your queries. Standard LINQ.
+- Your transactions. EF Core's `BeginTransactionAsync` still works
+  for single-shard scenarios.
+- Your tests. DTDE works against any EF Core provider — SQLite,
+  SQL Server, PostgreSQL, in-memory.
 
-### 2. Integration Tests
+## See also
 
-Test against sharded databases:
-
-```csharp
-[Fact]
-public async Task Query_CrossShard_ReturnsAllResults()
-{
-    // Insert into multiple shards
-    _context.Orders.Add(new Order { CreatedAt = new DateTime(2024, 6, 1) });
-    _context.Orders.Add(new Order { CreatedAt = new DateTime(2025, 1, 15) });
-    await _context.SaveChangesAsync();
-
-    // Query should return both
-    var allOrders = await _context.Orders.ToListAsync();
-    Assert.Equal(2, allOrders.Count);
-}
-
-[Fact]
-public async Task Query_SingleShard_OnlyQueriesTargetShard()
-{
-    // This should only hit 2024 shard
-    var orders2024 = await _context.Orders
-        .Where(o => o.CreatedAt.Year == 2024)
-        .ToListAsync();
-}
-```
-
-### 3. Performance Testing
-
-Compare query performance before and after:
-
-```csharp
-[Fact]
-public async Task Performance_ShardedQuery_FastEnough()
-{
-    var sw = Stopwatch.StartNew();
-
-    var results = await _context.Orders
-        .Where(o => o.CreatedAt >= DateTime.Today.AddYears(-1))
-        .ToListAsync();
-
-    sw.Stop();
-    Assert.True(sw.ElapsedMilliseconds < 200, "Query too slow");
-}
-```
-
----
-
-## Rollback Strategy
-
-### If Migration Fails
-
-1. **Revert DbContext**: Change back to `DbContext` base class
-2. **Remove DTDE configuration**: Remove `UseDtde()` call
-3. **Keep data tables**: Sharded tables remain for later retry
-
-### Gradual Rollout
-
-Enable DTDE per-entity:
-
-```csharp
-// Phase 1: Only Orders sharded
-modelBuilder.Entity<Order>().ShardByDate(o => o.CreatedAt, DateShardInterval.Year);
-
-// Phase 2: Add Customers
-modelBuilder.Entity<Customer>().ShardBy(c => c.Region);
-
-// Unsharded entities work as normal EF Core
-```
-
----
-
-## Checklist
-
-- [ ] Package installed
-- [ ] DbContext updated to inherit from `DtdeDbContext`
-- [ ] `UseDtde()` added to service configuration
-- [ ] Sharding strategies configured
-- [ ] Shard definitions added
-- [ ] Database tables created
-- [ ] Data migrated (if applicable)
-- [ ] Unit tests passing
-- [ ] Integration tests passing
-- [ ] Performance validated
-
----
-
-## Next Steps
-
-- [Getting Started Guide](getting-started.md) - Full setup walkthrough
-- [Sharding Guide](sharding-guide.md) - Detailed sharding options
-- [Troubleshooting](../wiki/troubleshooting.md) - Common issues
-
----
-
-[← Back to Guides](index.md)
+- [Getting started](getting-started.md) — 5-minute walk-through.
+- [Sharding guide](sharding-guide.md) — strategies, modes, groups.
+- [Cross-shard transactions](cross-shard-transactions.md) — atomicity.
+- [Bulk operations](bulk-operations.md) — for the data-migration pass.

@@ -1,525 +1,233 @@
-# Configuration Reference
+# Configuration
 
-Complete reference for all DTDE configuration options.
+Every option you can set on `DtdeOptionsBuilder` (the `dtde =>`
+callback in `AddDtdeDbContext`), plus the JSON shard-config file
+schema.
 
-## Table of Contents
-
-- [Service Configuration](#service-configuration)
-- [DTDE Options](#dtde-options)
-- [Shard Configuration](#shard-configuration)
-- [Entity Configuration](#entity-configuration)
-- [JSON Configuration](#json-configuration)
-- [Environment Variables](#environment-variables)
-
----
-
-## Service Configuration
-
-### Basic Setup
+## DI registration
 
 ```csharp
-services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseSqlServer(connectionString);
-    options.UseDtde();  // Default configuration
-});
+services.AddDtdeDbContext<AppDbContext>(
+    (db, conn) => db.UseSqlite(conn ?? "Data Source=app.db"),
+    dtde => dtde
+        .AddShards("EU", "US", "APAC")
+        .SetMaxParallelShards(8)
+        .EnableDiagnostics());
 ```
 
-### Advanced Setup
+Two callbacks:
+
+1. **`(db, conn) => ...`** — configures the EF Core provider. DTDE
+   invokes it with `conn = null` for the parent context (you typically
+   fall back to a default connection string) and with the shard's
+   connection for each per-shard context (database-mode and mixed-mode
+   shards).
+2. **`dtde => ...`** — configures DTDE itself.
+
+Optional third argument `enableTransparentSharding: false` opts out of
+the auto-promotion interceptor and the cross-shard transaction
+coordinator. Use only if you need full manual control.
+
+## Shard registration
+
+### Default group (single-topology applications)
 
 ```csharp
-services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseSqlServer(connectionString);
-    options.UseDtde(dtde =>
-    {
-        // Performance settings
-        dtde.SetMaxParallelShards(10);
+// Bulk shorthand for table-mode shards.
+dtde.AddShards("EU", "US", "APAC");
 
-        // Debugging
-        dtde.EnableDiagnostics();
+// Single-shard variants.
+dtde.AddShard("EU");                                          // table-mode
+dtde.AddShard("EU", "Server=eu.db;...");                     // database-mode
+dtde.AddTableShardInDatabase("EU", "Server=primary.db;..."); // mixed-mode
 
-        // Testing
-        dtde.EnableTestMode();
-
-        // Default temporal context
-        dtde.SetDefaultTemporalContext(() => DateTime.UtcNow);
-
-        // Shard definitions
-        dtde.AddShard(s => s.WithId("shard1")...);
-        dtde.AddShardsFromConfig("shards.json");
-    });
-});
-```
-
----
-
-## DTDE Options
-
-### DtdeOptions Class
-
-```csharp
-public sealed class DtdeOptions
-{
-    /// <summary>
-    /// Gets the list of configured shards.
-    /// </summary>
-    public IList<IShardMetadata> Shards { get; }
-
-    /// <summary>
-    /// Gets or sets the default temporal context provider.
-    /// </summary>
-    public Func<DateTime>? DefaultTemporalContextProvider { get; set; }
-
-    /// <summary>
-    /// Gets or sets the maximum number of shards to query in parallel.
-    /// Default: 10
-    /// </summary>
-    public int MaxParallelShards { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether diagnostics are enabled.
-    /// Default: false
-    /// </summary>
-    public bool EnableDiagnostics { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether test mode is enabled.
-    /// Default: false
-    /// </summary>
-    public bool EnableTestMode { get; set; }
-
-    /// <summary>
-    /// Gets or sets the metadata registry.
-    /// </summary>
-    public IMetadataRegistry MetadataRegistry { get; set; }
-
-    /// <summary>
-    /// Gets or sets the shard registry.
-    /// </summary>
-    public IShardRegistry ShardRegistry { get; set; }
-
-    /// <summary>
-    /// Gets or sets the temporal context.
-    /// </summary>
-    public ITemporalContext TemporalContext { get; set; }
-}
-```
-
-### Option Details
-
-#### MaxParallelShards
-
-Controls how many shards are queried simultaneously.
-
-| Value | Behavior |
-|-------|----------|
-| 1 | Sequential execution |
-| 5-10 | Balanced parallelism (recommended) |
-| 20+ | High parallelism (CPU-intensive) |
-
-```csharp
-dtde.SetMaxParallelShards(10);
-```
-
-**Considerations:**
-- Higher values increase memory usage
-- Database connection pool limits apply
-- CPU cores affect optimal parallelism
-
-#### EnableDiagnostics
-
-Enables detailed logging of DTDE operations.
-
-```csharp
-dtde.EnableDiagnostics();
-```
-
-**Logged Information:**
-- Shard resolution decisions
-- Query execution per shard
-- Timing information
-- Result merge operations
-
-#### EnableTestMode
-
-Disables sharding for testing purposes.
-
-```csharp
-dtde.EnableTestMode();
-```
-
-**Behavior:**
-- All queries go to a single shard
-- Simplifies unit testing
-- Useful for development
-
----
-
-## Shard Configuration
-
-### Programmatic Configuration
-
-#### Using Builder Pattern
-
-```csharp
+// Full fluent control.
 dtde.AddShard(s => s
-    .WithId("shard-eu")
-    .WithName("European Data")
-    .WithShardKeyValue("EU")
-    .WithTable("Customers_EU", "dbo")
-    .WithTier(ShardTier.Hot)
-    .WithPriority(100));
+    .WithId("2024-archive")
+    .WithName("2024 archive")
+    .WithConnectionString(archiveConnectionString)
+    .WithTier(ShardTier.Cold)
+    .WithDateRange(new DateTime(2024, 1, 1), new DateTime(2025, 1, 1))
+    .AsReadOnly());
 ```
 
-#### Using Static Factory Methods
+### Named groups (multi-topology applications)
 
 ```csharp
-// Table shard
-var tableShard = ShardMetadata.ForTable(
-    shardId: "shard-2024",
-    tableName: "Orders_2024",
-    shardKeyValue: "2024",
-    schemaName: "dbo");
-
-// Database shard
-var dbShard = ShardMetadata.ForDatabase(
-    shardId: "shard-eu",
-    name: "EU Database",
-    connectionString: "Server=eu.db.com;...",
-    shardKeyValue: "EU");
-
-dtde.AddShard(tableShard);
-dtde.AddShard(dbShard);
+dtde
+    .AddShardGroup("hash8", g => g.AddShards("0","1","2","3","4","5","6","7"))
+    .AddShardGroup("years", g => g.AddShards("2023","2024","2025"))
+    // The default group is still available alongside.
+    .AddShards("EU", "US", "APAC");
 ```
 
-### Shard Properties
+`DtdeShardGroupBuilder` exposes the same shorthand as the outer
+builder — `AddShard(id)`, `AddShard(id, conn)`,
+`AddTableShardInDatabase(id, conn)`, `AddShards(params string[])`,
+plus `AddShard(Action<ShardMetadataBuilder>)` for full fluent control —
+but locked to the group.
 
-| Property | Type | Description | Required |
-|----------|------|-------------|----------|
-| `ShardId` | string | Unique identifier | Yes |
-| `Name` | string | Display name | Yes |
-| `StorageMode` | enum | Tables or Databases | Yes |
-| `TableName` | string | Table name (table mode) | Conditional |
-| `SchemaName` | string | Schema name (default: "dbo") | No |
-| `ConnectionString` | string | Connection (database mode) | Conditional |
-| `ShardKeyValue` | string | Key value this shard handles | No |
-| `DateRange` | DateRange | Date range coverage | No |
-| `KeyRange` | KeyRange | Numeric key range | No |
-| `Tier` | ShardTier | Storage tier | No |
-| `IsReadOnly` | bool | Read-only flag | No |
-| `Priority` | int | Query priority (default: 100) | No |
+### `ShardMetadataBuilder` reference
 
-### Storage Tiers
+| Method | Purpose |
+|---|---|
+| `WithId(string)` | The shard's id (unique within its group). Required. |
+| `WithGroup(string)` | The shard's group name. Defaults to the default group. |
+| `WithName(string)` | Display name for diagnostics. |
+| `WithStorageMode(ShardStorageMode)` | `Tables` / `Databases` / `Manual`. Defaults to `Tables`. |
+| `WithTable(string tableName, string schemaName = "dbo")` | Sets the per-shard table (manual / table-mode). |
+| `WithConnectionString(string)` | The per-shard connection (database-mode and mixed-mode). |
+| `WithShardKeyValue(string)` | The shard-key value this shard handles (used by property-value strategy). Defaults to the shard id. |
+| `WithDateRange(DateTime, DateTime)` | The date range this shard covers (date-range sharding). |
+| `WithKeyRange(KeyRange)` | The key range this shard covers (range sharding). |
+| `WithTier(ShardTier)` | `Hot` / `Warm` / `Cold` / `Archive`. Defaults to `Hot`. |
+| `AsReadOnly()` | Marks the shard read-only (no writes will route to it). |
+| `WithPriority(int)` | Lower wins when multiple shards match. Defaults to 100. |
+
+## Runtime options
 
 ```csharp
-public enum ShardTier
-{
-    Hot,        // Active data, SSD/fast storage
-    Warm,       // Less active, standard storage
-    Cold,       // Archived, slow storage
-    Archive     // Long-term, cheapest storage
-}
+dtde
+    .SetDefaultTemporalContext(() => DateTime.UtcNow)
+    .SetMaxParallelShards(10)
+    .EnableDiagnostics();
 ```
 
-**Use Cases:**
+| Option | Default | Notes |
+|---|---|---|
+| `SetDefaultTemporalContext(Func<DateTime>)` | `DateTime.UtcNow` | The "now" used by `ValidAt` when no point-in-time is supplied. |
+| `SetMaxParallelShards(int)` | 10 | Cap on parallel per-shard query tasks during fan-out. |
+| `EnableDiagnostics()` | off | Verbose routing/execution logs. |
+| `EnableTestMode()` | off | Single-shard fallback. For test environments only. |
 
-| Tier | Example Use | Storage Recommendation |
-|------|-------------|----------------------|
-| Hot | Current year data | SSD, premium tier |
-| Warm | Last 1-2 years | Standard SSD |
-| Cold | 3-5 years old | HDD, standard tier |
-| Archive | 5+ years | Archive storage |
+## Cross-shard transaction options
 
----
+`CrossShardTransactionOptions` is a regular class — instantiate it to
+override defaults per call. See [cross-shard transactions](../guides/cross-shard-transactions.md)
+for full coverage.
 
-## Entity Configuration
+| Property | Default | Notes |
+|---|---|---|
+| `IsolationLevel` | `ReadCommitted` | Passed through to participants. |
+| `Timeout` | 60 s | Tx times out and rolls back. |
+| `EnableRetry` | `true` | Retry on transient errors via `ExecuteInTransactionAsync`. |
+| `MaxRetryAttempts` | 3 | |
+| `RetryDelay` | 100 ms | Exponential backoff up to `MaxRetryDelay`. |
+| `MaxRetryDelay` | 5 s | |
+| `UseExponentialBackoff` | `true` | |
+| `TransactionName` | none | Tagged into the generated transaction id. |
+| `EnableRecovery` | `false` | Persist lifecycle events via `ITransactionLog`. |
 
-### Sharding Configuration
+Two presets: `CrossShardTransactionOptions.ShortLived` (10 s, 2
+retries) and `LongRunning` (5 min, 5 retries, recovery on).
 
-#### Property-Based
+## Transaction log
 
 ```csharp
-modelBuilder.Entity<Customer>(entity =>
-{
-    entity.ShardBy(c => c.Region)
-          .WithStorageMode(ShardStorageMode.Tables);
-});
+// File-backed durable log for crash recovery.
+services.AddSingleton<ITransactionLog>(_ =>
+    new FileBasedTransactionLog("/var/dtde/tx-log.jsonl"));
+
+services.AddDtdeDbContext<AppDbContext>(...);
+// The log is auto-wired into the coordinator on registration.
 ```
 
-#### Hash-Based
+The default is `InMemoryTransactionLog`. See
+[transaction log and recovery](../guides/transaction-log-and-recovery.md).
+
+## Bulk insert providers
 
 ```csharp
-modelBuilder.Entity<Customer>(entity =>
-{
-    entity.ShardByHash(c => c.Id, shardCount: 8)
-          .WithStorageMode(ShardStorageMode.Tables);
-});
+services.AddSingleton<IBulkInsertProvider, MyProviderSpecificBulkInsert>();
+services.AddDtdeDbContext<AppDbContext>(...);
 ```
 
-#### Date-Based
+DI registration order matters — registrations BEFORE
+`AddDtdeDbContext` go ahead of the default; DTDE picks the first
+provider whose `CanHandle(context)` returns `true`. See
+[bulk operations](../guides/bulk-operations.md).
 
-```csharp
-modelBuilder.Entity<Order>(entity =>
-{
-    entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Year)
-          .WithStorageMode(ShardStorageMode.Tables);
-});
-```
+## JSON shard configuration
 
-### Temporal Configuration
-
-#### Basic Temporal
-
-```csharp
-entity.HasTemporalValidity(
-    validFrom: e => e.EffectiveDate,
-    validTo: e => e.ExpirationDate);
-```
-
-#### With Versioning Mode
-
-```csharp
-entity.HasTemporalValidity(e => e.ValidFrom, e => e.ValidTo)
-      .WithVersioningMode(VersioningMode.SoftVersion);
-```
-
-#### With History Table
-
-```csharp
-entity.HasTemporalValidity(e => e.ValidFrom, e => e.ValidTo)
-      .WithVersioningMode(VersioningMode.AuditTrail)
-      .WithHistoryTable("ContractHistory");
-```
-
-#### With Open-Ended Value
-
-```csharp
-entity.HasTemporalValidity(e => e.ValidFrom, e => e.ValidTo)
-      .WithOpenEndedValue(DateTime.MaxValue);
-```
-
----
-
-## JSON Configuration
-
-### Shard Configuration File
-
-Create `shards.json`:
+`AddShardsFromConfig("shards.json")` loads shards from a JSON file:
 
 ```json
 {
   "shards": [
     {
-      "shardId": "shard-2024-hot",
-      "name": "2024 Active Data",
-      "tableName": "Orders_2024",
-      "schemaName": "dbo",
-      "shardKeyValue": "2024",
+      "shardId": "EU",
+      "name": "EU primary",
+      "connectionString": "Server=eu.db;Database=Customers;...",
       "tier": "Hot",
+      "priority": 1,
+      "dateRangeStart": null,
+      "dateRangeEnd": null,
+      "isReadOnly": false
+    },
+    {
+      "shardId": "US",
+      "name": "US primary",
+      "connectionString": "Server=us.db;Database=Customers;...",
+      "tier": "Hot",
+      "priority": 1
+    },
+    {
+      "shardId": "2024-archive",
+      "name": "2024 archive",
+      "connectionString": "Server=archive.db;Database=Archive2024;...",
+      "tier": "Cold",
       "priority": 100,
-      "isReadOnly": false,
-      "dateRangeStart": "2024-01-01T00:00:00",
-      "dateRangeEnd": "2024-12-31T23:59:59"
-    },
-    {
-      "shardId": "shard-2023-warm",
-      "name": "2023 Historical Data",
-      "tableName": "Orders_2023",
-      "schemaName": "dbo",
-      "shardKeyValue": "2023",
-      "tier": "Warm",
-      "priority": 50,
-      "isReadOnly": true,
-      "dateRangeStart": "2023-01-01T00:00:00",
-      "dateRangeEnd": "2023-12-31T23:59:59"
+      "dateRangeStart": "2024-01-01",
+      "dateRangeEnd": "2025-01-01",
+      "isReadOnly": true
     }
   ]
 }
 ```
 
-### Loading Configuration
+| Field | Type | Notes |
+|---|---|---|
+| `shardId` | string | Required. |
+| `name` | string | Optional; defaults to `shardId`. |
+| `connectionString` | string | Required for database-mode / mixed-mode. |
+| `tier` | string | `Hot` / `Warm` / `Cold` / `Archive`. Defaults to `Hot`. |
+| `priority` | int | Lower wins. Defaults to 100. |
+| `dateRangeStart` / `dateRangeEnd` | ISO-8601 datetime | Optional. |
+| `isReadOnly` | bool | Defaults to `false`. |
+
+The JSON loader currently doesn't support shard groups directly — for
+group-based topologies, use the fluent API.
+
+## Configuration patterns
+
+### Per-environment connection strings
 
 ```csharp
-options.UseDtde(dtde =>
-{
-    dtde.AddShardsFromConfig("shards.json");
-});
+builder.Services.AddDtdeDbContext<AppDbContext>(
+    (db, conn) => db.UseSqlServer(conn ?? builder.Configuration.GetConnectionString("Default")),
+    dtde => dtde
+        .AddShard("EU", builder.Configuration.GetConnectionString("EU")!)
+        .AddShard("US", builder.Configuration.GetConnectionString("US")!));
 ```
 
-### Database Sharding JSON
-
-```json
-{
-  "shards": [
-    {
-      "shardId": "shard-eu",
-      "name": "European Database",
-      "connectionString": "Server=eu.sql.com;Database=App;...",
-      "shardKeyValue": "EU",
-      "tier": "Hot",
-      "priority": 100
-    },
-    {
-      "shardId": "shard-us",
-      "name": "US Database",
-      "connectionString": "Server=us.sql.com;Database=App;...",
-      "shardKeyValue": "US",
-      "tier": "Hot",
-      "priority": 100
-    }
-  ]
-}
-```
-
-### JSON Schema Properties
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `shardId` | string | Yes | Unique shard identifier |
-| `name` | string | No | Display name |
-| `tableName` | string | No* | Table name (table sharding) |
-| `schemaName` | string | No | Schema (default: "dbo") |
-| `connectionString` | string | No* | Connection (database sharding) |
-| `shardKeyValue` | string | No | Key value for routing |
-| `tier` | string | No | Hot, Warm, Cold, Archive |
-| `priority` | int | No | Query priority (default: 100) |
-| `isReadOnly` | bool | No | Read-only flag |
-| `dateRangeStart` | datetime | No | Start of date range |
-| `dateRangeEnd` | datetime | No | End of date range |
-
-*Either `tableName` or `connectionString` required based on storage mode.
-
----
-
-## Environment Variables
-
-### Connection String Override
+### Test-only single-shard fallback
 
 ```csharp
-var connectionString = Environment.GetEnvironmentVariable("DTDE_CONNECTION_STRING")
-    ?? configuration.GetConnectionString("Default");
+dtde => dtde
+    .AddShard("test")
+    .EnableTestMode();
 ```
 
-### Shard Configuration Path
+### Verbose tracing
 
 ```csharp
-var shardConfigPath = Environment.GetEnvironmentVariable("DTDE_SHARD_CONFIG")
-    ?? "shards.json";
-
-dtde.AddShardsFromConfig(shardConfigPath);
+dtde => dtde
+    .AddShards("EU", "US", "APAC")
+    .EnableDiagnostics();
 ```
 
-### Environment-Specific Configuration
+## See also
 
-```csharp
-// appsettings.Development.json
-{
-  "Dtde": {
-    "MaxParallelShards": 4,
-    "EnableDiagnostics": true
-  }
-}
-
-// appsettings.Production.json
-{
-  "Dtde": {
-    "MaxParallelShards": 20,
-    "EnableDiagnostics": false
-  }
-}
-```
-
-```csharp
-var dtdeConfig = configuration.GetSection("Dtde");
-
-options.UseDtde(dtde =>
-{
-    dtde.SetMaxParallelShards(dtdeConfig.GetValue<int>("MaxParallelShards", 10));
-
-    if (dtdeConfig.GetValue<bool>("EnableDiagnostics"))
-    {
-        dtde.EnableDiagnostics();
-    }
-});
-```
-
----
-
-## Configuration Validation
-
-### Startup Validation
-
-DTDE validates configuration at startup:
-
-```csharp
-// Throws if shard IDs are duplicated
-dtde.AddShard(s => s.WithId("shard1")...);
-dtde.AddShard(s => s.WithId("shard1")...); // Error!
-
-// Throws if required properties missing
-dtde.AddShard(s => s.WithTable("MyTable")); // Error: No ID
-```
-
-### Runtime Validation
-
-```csharp
-// Check shard exists before query
-var shardExists = context.ShardRegistry.GetShard("my-shard") != null;
-
-// Validate entity has sharding configured
-var hasSharding = context.MetadataRegistry.GetEntityMetadata<Customer>()
-    ?.ShardingConfiguration != null;
-```
-
----
-
-## Complete Example
-
-```csharp
-// Program.cs
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
-    options.UseDtde(dtde =>
-    {
-        // Performance
-        dtde.SetMaxParallelShards(
-            builder.Configuration.GetValue<int>("Dtde:MaxParallelShards", 10));
-
-        // Diagnostics (development only)
-        if (builder.Environment.IsDevelopment())
-        {
-            dtde.EnableDiagnostics();
-        }
-
-        // Load shards from config
-        var shardConfig = builder.Configuration.GetValue<string>("Dtde:ShardConfigPath");
-        if (!string.IsNullOrEmpty(shardConfig))
-        {
-            dtde.AddShardsFromConfig(shardConfig);
-        }
-
-        // Programmatic shards
-        dtde.AddShard(s => s
-            .WithId("default")
-            .WithTable("Entities", "dbo")
-            .WithTier(ShardTier.Hot)
-            .WithPriority(0));
-    });
-});
-```
-
----
-
-## Next Steps
-
-- [Classes Reference](classes-reference.md) - Detailed class documentation
-- [Troubleshooting](troubleshooting.md) - Common issues and solutions
-- [API Reference](api-reference.md) - Complete API documentation
-
----
-
-[← Back to Wiki](index.md) | [Classes Reference →](classes-reference.md)
+- [Architecture](architecture.md)
+- [API reference](api-reference.md)
+- [Troubleshooting](troubleshooting.md)
