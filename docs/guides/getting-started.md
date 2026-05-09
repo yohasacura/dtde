@@ -1,13 +1,35 @@
 # Getting started
 
 Get DTDE running in five minutes. By the end you'll have a sharded `DbContext`,
-three logical shards, and a working LINQ query that fans out across them.
+three logical shards backed by real per-shard tables, and a working LINQ query
+that fans out across them.
 
 ## Prerequisites
 
 - .NET 8 SDK or newer (the package multi-targets `net8.0`, `net9.0`, `net10.0`).
 - An EF Core provider — any will do. This guide uses SQLite because it has zero setup.
-- Roughly five minutes.
+- About five minutes.
+
+## How DTDE actually shards your data
+
+Two layers, one contract:
+
+1. **Per entity (in `OnModelCreating`)** you declare *how* a row maps to a shard
+   key — `entity.ShardBy(c => c.Region)` for property-value sharding,
+   `ShardByDate(...)`, `ShardByHash(...)`, etc.
+2. **In `Program.cs`** you declare *the shards themselves* — `dtde.AddShards("EU", "US", "APAC")`
+   for table-mode (one DB, many tables) or
+   `dtde.AddShard("EU", "Server=eu-db;...")` for database-mode (a separate DB
+   per shard).
+
+**The contract that ties them together:** the shard's id (the string you pass
+to `AddShard("EU")` or `AddShards(...)`) must equal the value the entity's
+shard-key property carries at runtime. So a `Customer` row with
+`Region = "EU"` lands in the shard registered with id `"EU"`. If the property
+value doesn't match any registered shard, the row has nowhere to go and DTDE
+will throw at write time.
+
+That's the whole mental model. The rest is just choosing where shards live.
 
 ## 1. Install the package
 
@@ -16,32 +38,24 @@ dotnet add package Dtde.EntityFramework
 dotnet add package Microsoft.EntityFrameworkCore.Sqlite
 ```
 
-`Dtde.EntityFramework` is the only DTDE package application code references.
-It transitively pulls in `Dtde.Core` and `Dtde.Abstractions`.
+`Dtde.EntityFramework` transitively pulls in `Dtde.Core` and `Dtde.Abstractions`.
 
 ## 2. Define an entity
-
-Pick any property to shard on. We'll use `Customer.Region`.
 
 ```csharp
 public class Customer
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string Region { get; set; } = string.Empty; // shard key
+    public string Region { get; set; } = string.Empty; // shard-key property
     public DateTime CreatedAt { get; set; }
 }
 ```
 
-DTDE doesn't care what the property is called, what its type is, or where it
-sits on the entity. It works with whatever string-ish property you pick — region
-codes, tenant ids, customer-segment names, etc.
+Any string-ish property works — region codes, tenant ids, whatever your
+domain calls it. DTDE makes no assumption about the name or content.
 
-## 3. Inherit `DtdeDbContext`
-
-Subclass [`DtdeDbContext`](https://github.com/yohasacura/dtde/blob/main/src/Dtde.EntityFramework/DtdeDbContext.cs)
-instead of `DbContext`, and configure entities the way you would in any EF Core
-app — but with one extra fluent call to declare the shard key:
+## 3. Inherit `DtdeDbContext`, declare the shard key in `OnModelCreating`
 
 ```csharp
 using Dtde.EntityFramework;
@@ -62,16 +76,18 @@ public class AppDbContext : DtdeDbContext
         modelBuilder.Entity<Customer>(entity =>
         {
             entity.HasKey(c => c.Id);
-            entity.ShardBy(c => c.Region); // <-- the only DTDE-specific line
+            entity.ShardBy(c => c.Region);   // <-- the only DTDE-specific line
         });
     }
 }
 ```
 
+`ShardBy(c => c.Region)` says "use the value of `Region` as the shard key".
+That's all the model needs to know.
+
 ## 4. Wire it up in `Program.cs`
 
-One call. The first lambda configures EF Core (any provider). The second declares
-the shards.
+One call, two callbacks:
 
 ```csharp
 using Dtde.EntityFramework.Extensions;
@@ -79,24 +95,58 @@ using Dtde.EntityFramework.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDtdeDbContext<AppDbContext>(
-    db => db.UseSqlite("Data Source=app.db"),
+    (db, conn) => db.UseSqlite(conn ?? "Data Source=app.db"),
     dtde => dtde.AddShards("EU", "US", "APAC"));
 
 var app = builder.Build();
-
-// ... routes / middleware
 ```
 
-That's the whole setup.
+What's happening:
 
-`AddShards("EU", "US", "APAC")` says "I have three logical shards, named EU,
-US, and APAC, and the connection string from `db => ...` covers all of them."
-Each shard's id doubles as the shard-key value, so a row with `Region = "EU"`
-lands in the EU shard.
+- The first lambda — `(db, conn) => db.UseSqlite(conn ?? "...")` — configures
+  the EF Core provider. DTDE invokes it twice: once for the parent context
+  (with `conn = null` → fall through to your default) and once per shard
+  (with `conn` set to that shard's connection string).
+- The second lambda — `dtde => ...` — declares your shards.
 
-## 5. Use it
+Above is **table-mode**: one SQLite file, three logical shards, three tables
+(`Customers_EU`, `Customers_US`, `Customers_APAC`) created automatically by
+DTDE's per-shard model.
 
-Standard EF Core LINQ. DTDE handles routing.
+Want **database-mode** (one database per shard)? Same call, you just supply
+each shard's connection string:
+
+```csharp
+builder.Services.AddDtdeDbContext<AppDbContext>(
+    (db, conn) => db.UseSqlite(conn ?? "Data Source=base.db"),
+    dtde => dtde
+        .AddShard("EU", "Data Source=eu.db")
+        .AddShard("US", "Data Source=us.db")
+        .AddShard("APAC", "Data Source=apac.db"));
+```
+
+Each per-shard context now connects to its own database; the table is named
+`Customers` everywhere because there's no name conflict — different DB.
+
+## 5. Provision the shards (one-time)
+
+For samples, integration tests, or a fresh dev environment, call:
+
+```csharp
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.EnsureAllShardsCreatedAsync();
+}
+```
+
+This walks every registered shard and creates its tables (table-mode) or its
+database + tables (database-mode). In production you'd usually run EF Core
+migrations per shard instead.
+
+## 6. Use it
+
+Standard EF Core LINQ:
 
 ```csharp
 public class CustomersController(AppDbContext db) : ControllerBase
@@ -104,69 +154,53 @@ public class CustomersController(AppDbContext db) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(Customer customer)
     {
-        db.Customers.Add(customer);     // routed by Region
+        db.Customers.Add(customer);     // routed by Customer.Region
         await db.SaveChangesAsync();
         return Ok();
     }
 
     [HttpGet]
-    public Task<List<Customer>> AllCustomers()
-        => db.Customers.ToListAsync();   // fans out across all shards
+    public Task<List<Customer>> All() => db.Customers.ToListAsync();
+    // No filter on shard key → fans out across all shards, merges results.
 
     [HttpGet("{region}")]
-    public Task<List<Customer>> ByRegion(string region)
-        => db.Customers
-              .Where(c => c.Region == region)  // partition pruned to one shard
-              .ToListAsync();
+    public Task<List<Customer>> ByRegion(string region) =>
+        db.Customers.Where(c => c.Region == region).ToListAsync();
+    // Where on shard key → DTDE prunes to the matching shard only.
 }
 ```
 
-That's the entire mental model:
+Three rules, summarised:
 
-- **Inserts** are routed by the shard key.
-- **Queries with a `Where` on the shard key** are pruned to the matching shard.
-- **Queries without** fan out across all shards and merge the results.
+- **Inserts**: routed by the shard-key value on the entity.
+- **Queries with `Where` on the shard key**: pruned to one shard.
+- **Queries without**: fanned out across all shards, results merged.
 
 ## What if I need...
 
-### ...separate databases per shard
-
-Pass a connection string per shard:
+### ...time-bucketed sharding (transactions, audit logs)
 
 ```csharp
-dtde => dtde
-    .AddShard("EU",   "Server=eu-db;Database=Customers;...")
-    .AddShard("US",   "Server=us-db;Database=Customers;...")
-    .AddShard("APAC", "Server=apac-db;Database=Customers;...")
-```
-
-### ...time-bucketed sharding for transactions / audit logs
-
-Configure the entity differently and add date-ranged shards:
-
-```csharp
-// AppDbContext.OnModelCreating
+// Entity
 modelBuilder.Entity<Order>()
     .ShardByDate(o => o.OrderDate, DateShardInterval.Year);
 
-// Program.cs
-dtde => dtde
-    .AddShard(s => s.WithId("2023").WithConnectionString(year2023ConnStr)
-        .WithDateRange(new DateTime(2023, 1, 1), new DateTime(2024, 1, 1)))
-    .AddShard(s => s.WithId("2024").WithConnectionString(year2024ConnStr)
-        .WithDateRange(new DateTime(2024, 1, 1), new DateTime(2025, 1, 1)));
+// Program.cs — one shard per year
+dtde => dtde.AddShards("2023", "2024", "2025")
 ```
 
-### ...even distribution by hash
+The order's year (extracted from `o.OrderDate`) becomes the shard key.
+
+### ...hash-based even distribution
 
 ```csharp
-// AppDbContext.OnModelCreating
 modelBuilder.Entity<UserProfile>()
     .ShardByHash(u => u.UserId, shardCount: 8);
 
-// Program.cs
-dtde => dtde.AddShards("0", "1", "2", "3", "4", "5", "6", "7");
+dtde => dtde.AddShards("0", "1", "2", "3", "4", "5", "6", "7")
 ```
+
+DTDE computes the user-id hash modulo 8 to pick the shard.
 
 ### ...point-in-time queries (temporal entities)
 
@@ -192,35 +226,38 @@ var asOfLastMonth = await db
     .ToListAsync();
 ```
 
-See the [Temporal guide](temporal-guide.md) for the full mutation API
-(`AddTemporal`, `CreateNewVersion`, `Terminate`).
+### ...customising the per-shard table-name pattern
+
+Default is `{Table}_{ShardId}` (so `Customers_EU`). Override per entity:
+
+```csharp
+modelBuilder.Entity<Customer>()
+    .ShardBy(c => c.Region)
+    .WithTablePattern("{Table}__shard_{ShardId}");   // → Customers__shard_EU
+```
+
+Tokens: `{Table}` (entity table name), `{Schema}` (default `dbo`),
+`{ShardId}`.
 
 ### ...shard configs from JSON instead of code
-
-For ops scenarios where shards change without redeploying:
 
 ```csharp
 dtde => dtde.AddShardsFromConfig("shards.json");
 ```
 
-See [Configuration reference](../wiki/configuration.md) for the JSON schema.
+JSON schema in [Configuration reference](../wiki/configuration.md).
 
-## Single canonical configuration path
-
-DTDE has **one** way to register, **one** place to configure entities, **one**
-DbContext base type:
+## The single canonical map
 
 | What | Where | API |
 |---|---|---|
-| DI registration | `Program.cs` | `services.AddDtdeDbContext<TContext>(db, dtde)` |
+| DI registration | `Program.cs` | `services.AddDtdeDbContext<TContext>((db, conn) => ..., dtde => ...)` |
+| Provisioning | startup | `db.EnsureAllShardsCreatedAsync()` |
 | Shard list | inside `dtde` callback | `dtde.AddShards(...)` / `dtde.AddShard(id[, conn])` / `dtde.AddShard(s => ...)` |
 | Entity sharding | `OnModelCreating` | `entity.ShardBy(...)` / `ShardByDate(...)` / `ShardByHash(...)` |
+| Per-shard table pattern | `OnModelCreating` | `entity.ShardBy(...).WithTablePattern("{Table}_{ShardId}")` |
 | Temporal validity | `OnModelCreating` | `entity.HasTemporalValidity(...)` |
 | Queries | application code | standard LINQ + `db.ValidAt<T>(...)` |
-
-If you find yourself reaching for something that's not in this table, check the
-[Wiki](../wiki/index.md) — but the table above is enough for ~90% of
-applications.
 
 ## Next steps
 

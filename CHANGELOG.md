@@ -8,9 +8,36 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ## [Unreleased]
 
 > **Breaking release in progress.** This entry collapses several redundant
-> configuration paths from v1.0.0 into a single canonical setup. The migration
-> is straightforward (5-10 lines per project); see "Migrating from 1.0.0" below.
-> The next published version number is to be decided.
+> configuration paths from v1.0.0 into a single canonical setup, and turns
+> sharding from a metadata-only concept into actually-routes-data behaviour.
+> The migration is straightforward (5-10 lines per project); see "Migrating
+> from 1.0.0" below. The next published version number is to be decided.
+
+### Real per-shard execution (was metadata-only in v1.0)
+
+In v1.0, DTDE made shard-routing *decisions* but the execution layer always
+returned the same `DbContext` and the same `DbSet` regardless of which shard
+was chosen. Net effect: sharding was a no-op — all rows ended up in one
+table in one database, regardless of `ShardBy(...)` configuration.
+
+This release fixes that:
+
+- **`PerShardContextFactory<TContext>`** replaces `NullShardContextFactory` as
+  the default registration. It materialises a fresh `DbContext` per shard
+  with the right connection string and the right EF model.
+- **`DtdeShardModelCustomizer`** runs after the user's `OnModelCreating` and,
+  for table-mode shards, rewrites every sharded entity's table name to its
+  per-shard form (default pattern `{Table}_{ShardId}`, configurable via
+  `ShardingBuilder<T>.WithTablePattern(...)`).
+- **`DtdeModelCacheKeyFactory`** keys EF Core's model cache by `(context type,
+  active shard id, storage mode)` so each shard gets its own cached model.
+- **`DtdeDbContext.EnsureAllShardsCreatedAsync()`** provisions every
+  shard's tables / databases — analogous to `EnsureCreatedAsync` but
+  shard-aware.
+
+End-to-end integration tests now verify that table-mode produces real per-shard
+tables (`Customers_EU`, `Customers_US`, etc. on a single SQLite file) and that
+database-mode writes the right rows to the right per-shard databases.
 
 ### Why
 
@@ -82,15 +109,31 @@ compatibility. This pass picks one of each.
 -     });
 - });
 
-+ // v2.0
++ // After
 + builder.Services.AddDtdeDbContext<AppDbContext>(
-+     db => db.UseSqlite(cs),
++     (db, conn) => db.UseSqlite(conn ?? cs),
 +     dtde => dtde.AddShards("EU", "US"));
 +
-+ // ...and move HasTemporalValidity to AppDbContext.OnModelCreating:
++ // Plus, in AppDbContext.OnModelCreating:
 + modelBuilder.Entity<Contract>()
 +     .HasTemporalValidity(c => c.ValidFrom, c => c.ValidTo);
++
++ // Once at startup (or before tests), provision the per-shard tables / DBs:
++ await db.EnsureAllShardsCreatedAsync();
 ```
+
+Two things changed about the registration shape:
+
+1. The first lambda now takes **two parameters** — `(db, connectionString)`.
+   DTDE invokes it once for the parent context with `connectionString = null`
+   (your code falls through to its default), and once per shard with that
+   shard's connection string. For database-mode this is essential; for
+   table-mode the per-shard call passes `null` too, so the same default
+   wins.
+2. **`EnsureAllShardsCreatedAsync()`** replaces the old habit of calling
+   `db.Database.EnsureCreated()` once. The old call only created the parent's
+   tables — per-shard tables / databases were never provisioned. The new
+   helper walks every registered shard.
 
 For shard tiers, read-only flags, custom shard names, etc., the full
 `AddShard(s => s.WithId(...).WithTier(...).AsReadOnly())` form is unchanged.
