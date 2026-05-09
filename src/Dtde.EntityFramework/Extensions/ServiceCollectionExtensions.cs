@@ -8,6 +8,7 @@ using Dtde.EntityFramework.Query;
 using Dtde.EntityFramework.Update;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -159,9 +160,34 @@ public static class ServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<CrossShardTransactionCoordinator>>();
             var transactionLogger = sp.GetRequiredService<ILogger<CrossShardTransaction>>();
 
+            // Participant factory: wraps the IShardContextFactory and begins
+            // each per-shard transaction at the coordinator's requested
+            // isolation level. Relational providers honour the level;
+            // non-relational (in-memory) ones quietly ignore it.
+            ShardParticipantFactory participantFactory = async (shardId, isolationLevel, ct) =>
+            {
+                var context = await contextFactory.CreateContextAsync(shardId, ct).ConfigureAwait(false);
+                IDbContextTransaction transaction;
+
+                if (context.Database.IsRelational())
+                {
+                    transaction = await context.Database
+                        .BeginTransactionAsync(isolationLevel, ct)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    transaction = await context.Database
+                        .BeginTransactionAsync(ct)
+                        .ConfigureAwait(false);
+                }
+
+                return (context, transaction);
+            };
+
             return new CrossShardTransactionCoordinator(
                 shardRegistry,
-                async (shardId, ct) => await contextFactory.CreateContextAsync(shardId, ct).ConfigureAwait(false),
+                participantFactory,
                 logger,
                 transactionLogger);
         });

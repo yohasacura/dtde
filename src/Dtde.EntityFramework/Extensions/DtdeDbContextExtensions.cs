@@ -1,4 +1,5 @@
 using Dtde.Abstractions.Metadata;
+using Dtde.Abstractions.Transactions;
 using Dtde.EntityFramework.Configuration;
 using Dtde.EntityFramework.Infrastructure;
 using Dtde.EntityFramework.Query;
@@ -6,6 +7,7 @@ using Dtde.EntityFramework.Query;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Dtde.EntityFramework.Extensions;
 
@@ -103,5 +105,63 @@ public static class DtdeDbContextExtensions
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Begins a cross-shard transaction with default options. The returned
+    /// <see cref="ICrossShardTransaction"/> coordinates a two-phase-commit
+    /// (2PC) across enlisted shards; with exactly one enlisted participant it
+    /// degrades to a plain EF Core local transaction (single-shard fast
+    /// path).
+    /// </summary>
+    /// <param name="context">The parent DTDE-aware DbContext.</param>
+    /// <param name="cancellationToken">Optional cancellation token.</param>
+    /// <returns>A new cross-shard transaction. Always wrap it in
+    /// <c>await using</c> — disposing without committing rolls back any
+    /// enlisted participants.</returns>
+    /// <example>
+    /// <code>
+    /// await using var tx = await db.BeginCrossShardTransactionAsync();
+    /// var euCtx = (await tx.GetOrCreateParticipantAsync(euShard)).Context;
+    /// var usCtx = (await tx.GetOrCreateParticipantAsync(usShard)).Context;
+    ///
+    /// euCtx.Set&lt;Customer&gt;().Add(new Customer { Region = "EU", ... });
+    /// usCtx.Set&lt;Customer&gt;().Add(new Customer { Region = "US", ... });
+    ///
+    /// await tx.CommitAsync();
+    /// </code>
+    /// </example>
+    public static Task<ICrossShardTransaction> BeginCrossShardTransactionAsync(
+        this DtdeDbContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return BeginCrossShardTransactionAsync(context, CrossShardTransactionOptions.Default, cancellationToken);
+    }
+
+    /// <summary>
+    /// Begins a cross-shard transaction with the supplied options (isolation
+    /// level, timeout, retry policy, etc.).
+    /// </summary>
+    /// <param name="context">The parent DTDE-aware DbContext.</param>
+    /// <param name="options">The transaction options.</param>
+    /// <param name="cancellationToken">Optional cancellation token.</param>
+    /// <returns>A new cross-shard transaction.</returns>
+    public static Task<ICrossShardTransaction> BeginCrossShardTransactionAsync(
+        this DtdeDbContext context,
+        CrossShardTransactionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var coordinator = context.GetService<ICrossShardTransactionCoordinator>()
+            ?? throw new InvalidOperationException(
+                "No ICrossShardTransactionCoordinator is registered. Cross-shard transactions " +
+                "are wired automatically by AddDtdeDbContext when transparent sharding is enabled. " +
+                "If you opted out (enableTransparentSharding: false), register the coordinator " +
+                "manually.");
+
+        return coordinator.BeginTransactionAsync(options, cancellationToken);
     }
 }

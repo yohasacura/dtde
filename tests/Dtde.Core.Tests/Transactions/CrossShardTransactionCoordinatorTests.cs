@@ -18,7 +18,7 @@ public class CrossShardTransactionCoordinatorTests
     private readonly IShardRegistry _shardRegistry;
     private readonly ILogger<CrossShardTransactionCoordinator> _coordinatorLogger;
     private readonly ILogger<CrossShardTransaction> _transactionLogger;
-    private readonly Func<string, CancellationToken, Task<DbContext>> _contextFactory;
+    private readonly ShardParticipantFactory _participantFactory;
 
     public CrossShardTransactionCoordinatorTests()
     {
@@ -37,7 +37,7 @@ public class CrossShardTransactionCoordinatorTests
         _shardRegistry = registry;
         _coordinatorLogger = NullLogger<CrossShardTransactionCoordinator>.Instance;
         _transactionLogger = NullLogger<CrossShardTransaction>.Instance;
-        _contextFactory = CreateTestContextFactory();
+        _participantFactory = CreateTestParticipantFactory();
     }
 
     [Fact(DisplayName = "BeginTransactionAsync creates new transaction")]
@@ -211,19 +211,21 @@ public class CrossShardTransactionCoordinatorTests
     {
         return new CrossShardTransactionCoordinator(
             _shardRegistry,
-            _contextFactory,
+            _participantFactory,
             _coordinatorLogger,
             _transactionLogger);
     }
 
-    private static Func<string, CancellationToken, Task<DbContext>> CreateTestContextFactory()
+    private static ShardParticipantFactory CreateTestParticipantFactory()
     {
-        return (shardId, ct) =>
+        return async (shardId, isolationLevel, ct) =>
         {
             var optionsBuilder = new DbContextOptionsBuilder<TestDbContext>();
             optionsBuilder.UseInMemoryDatabase($"Test_{shardId}_{Guid.NewGuid()}")
                 .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning));
-            return Task.FromResult<DbContext>(new TestDbContext(optionsBuilder.Options));
+            DbContext context = new TestDbContext(optionsBuilder.Options);
+            var transaction = await context.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            return (context, transaction);
         };
     }
 

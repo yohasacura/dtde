@@ -1,6 +1,7 @@
 using Dtde.Abstractions.Metadata;
 using Dtde.Abstractions.Temporal;
 using Dtde.Core.Metadata;
+using Dtde.Core.Sharding;
 using Dtde.Core.Temporal;
 using Dtde.EntityFramework.Configuration;
 using Dtde.EntityFramework.Infrastructure;
@@ -86,7 +87,13 @@ public abstract class DtdeDbContext : DbContext
             }
 
             var temporal = ReadTemporalConfiguration(entityType, clrType);
-            if (temporal is null)
+            var sharding = ReadShardingConfiguration(entityType, clrType);
+
+            // Skip entities with no DTDE annotations entirely — the registry
+            // is for entities the framework needs metadata about (sharding
+            // routing, temporal queries). Plain EF entities don't need to be
+            // here.
+            if (temporal is null && sharding is null)
             {
                 continue;
             }
@@ -101,8 +108,78 @@ public abstract class DtdeDbContext : DbContext
                 schemaName,
                 primaryKey: primaryKey,
                 temporalConfiguration: temporal,
-                shardingConfiguration: null));
+                shardingConfiguration: sharding));
         }
+    }
+
+    private static IShardingConfiguration? ReadShardingConfiguration(IReadOnlyEntityType entityType, Type clrType)
+    {
+        var isSharded = entityType.FindAnnotation(DtdeAnnotationNames.IsSharded)?.Value as bool? ?? false;
+        if (!isSharded)
+        {
+            return null;
+        }
+
+        var shardKeyPropertyName = entityType.FindAnnotation(DtdeAnnotationNames.ShardKeyProperty)?.Value as string;
+        if (string.IsNullOrWhiteSpace(shardKeyPropertyName))
+        {
+            return null;
+        }
+
+        var shardKeyInfo = clrType.GetProperty(shardKeyPropertyName);
+        if (shardKeyInfo is null)
+        {
+            return null;
+        }
+
+        var shardKeyProperty = new PropertyMetadata(shardKeyInfo);
+
+        var strategyTypeAnnotation = entityType.FindAnnotation(DtdeAnnotationNames.ShardingStrategy)?.Value;
+        var strategyType = strategyTypeAnnotation switch
+        {
+            ShardingStrategyType st => st,
+            string s when Enum.TryParse<ShardingStrategyType>(s, out var parsed) => parsed,
+            _ => ShardingStrategyType.PropertyValue,
+        };
+
+        IShardingStrategy strategy = strategyType switch
+        {
+            ShardingStrategyType.Hash => BuildHashStrategy(entityType),
+            ShardingStrategyType.DateRange => new DateRangeShardingStrategy(),
+            _ => new PropertyBasedShardingStrategy(),
+        };
+
+        var storageMode = entityType.FindAnnotation(DtdeAnnotationNames.StorageMode)?.Value switch
+        {
+            ShardStorageMode m => m,
+            _ => ShardStorageMode.Tables,
+        };
+
+        var groupName = entityType.FindAnnotation(DtdeAnnotationNames.ShardGroupName)?.Value as string
+            ?? IShardGroupRegistry.DefaultGroupName;
+
+        var tablePattern = entityType.FindAnnotation(DtdeAnnotationNames.TableNamePattern)?.Value as string;
+        var migrationsEnabled = entityType.FindAnnotation(DtdeAnnotationNames.MigrationsEnabled)?.Value as bool? ?? true;
+        var dateInterval = entityType.FindAnnotation(DtdeAnnotationNames.DateInterval)?.Value as DateShardInterval?;
+
+        return new ShardingConfiguration(
+            strategyType,
+            storageMode,
+            shardKeyExpression: null,
+            shardKeyProperties: new[] { (IPropertyMetadata)shardKeyProperty },
+            strategy)
+        {
+            MigrationsEnabled = migrationsEnabled,
+            TableNamePattern = tablePattern,
+            DateInterval = dateInterval,
+            ShardGroupName = groupName,
+        };
+    }
+
+    private static HashShardingStrategy BuildHashStrategy(IReadOnlyEntityType entityType)
+    {
+        var shardCount = entityType.FindAnnotation(DtdeAnnotationNames.ShardCount)?.Value as int? ?? 4;
+        return new HashShardingStrategy(shardCount);
     }
 
     private static IPropertyMetadata? ReadPrimaryKey(IReadOnlyEntityType entityType, Type clrType)

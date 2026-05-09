@@ -6,22 +6,53 @@ using Dtde.Abstractions.Metadata;
 using Dtde.Abstractions.Transactions;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace Dtde.Core.Transactions;
 
 /// <summary>
+/// Materialises a per-shard <see cref="DbContext"/> and starts a local
+/// database transaction on it with the requested isolation level. Implemented
+/// in <c>Dtde.EntityFramework</c> so the relational
+/// <c>BeginTransactionAsync(IsolationLevel, CancellationToken)</c> overload
+/// can be used without leaking a relational reference into <c>Dtde.Core</c>.
+/// </summary>
+/// <param name="shardId">The shard's id (default-group local id, or fully-qualified <c>group::id</c>).</param>
+/// <param name="isolationLevel">The requested isolation level.</param>
+/// <param name="cancellationToken">The cancellation token.</param>
+/// <returns>The freshly-created per-shard context and its open local transaction.</returns>
+public delegate Task<(DbContext Context, IDbContextTransaction Transaction)> ShardParticipantFactory(
+    string shardId,
+    IsolationLevel isolationLevel,
+    CancellationToken cancellationToken);
+
+/// <summary>
 /// Represents a cross-shard transaction that coordinates operations across multiple shards.
 /// Implements the two-phase commit (2PC) protocol for distributed transaction coordination.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Participants are keyed by their <see cref="ShardIdentityExtensions.ToQualifiedId">fully-qualified id</see>
+/// — <c>"groupName::localId"</c> for named-group shards, or just the local id for default-group shards.
+/// This guarantees that two shards with the same local id in different groups (for example, shard <c>"0"</c> in
+/// <c>hash8</c> versus shard <c>"0"</c> in <c>hash3</c>) enrol as distinct participants.
+/// </para>
+/// <para>
+/// When the transaction commits with exactly one enlisted participant, the prepare phase is skipped — a
+/// single-shard transaction is just an EF Core local transaction, and 2PC adds no atomicity over what the
+/// underlying provider already gives.
+/// </para>
+/// </remarks>
 public sealed class CrossShardTransaction : ICrossShardTransaction
 {
     private readonly IShardRegistry _shardRegistry;
-    private readonly Func<string, CancellationToken, Task<DbContext>> _contextFactory;
+    private readonly ShardParticipantFactory _participantFactory;
     private readonly ILogger<CrossShardTransaction> _logger;
     private readonly ConcurrentDictionary<string, ShardTransactionParticipant> _participants = new();
     private readonly CancellationTokenSource _timeoutCts;
     private readonly object _stateLock = new();
+    private readonly IsolationLevel _participantIsolationLevel;
     private TransactionState _state = TransactionState.Active;
 
     /// <summary>
@@ -30,21 +61,22 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
     /// <param name="transactionId">The unique transaction identifier.</param>
     /// <param name="options">The transaction options.</param>
     /// <param name="shardRegistry">The shard registry.</param>
-    /// <param name="contextFactory">Factory for creating DbContext instances for shards.</param>
+    /// <param name="participantFactory">Factory that materialises a per-shard context and starts its local transaction.</param>
     /// <param name="logger">The logger.</param>
     internal CrossShardTransaction(
         string transactionId,
         CrossShardTransactionOptions options,
         IShardRegistry shardRegistry,
-        Func<string, CancellationToken, Task<DbContext>> contextFactory,
+        ShardParticipantFactory participantFactory,
         ILogger<CrossShardTransaction> logger)
     {
         TransactionId = transactionId ?? throw new ArgumentNullException(nameof(transactionId));
         IsolationLevel = options?.IsolationLevel ?? CrossShardIsolationLevel.ReadCommitted;
         Timeout = options?.Timeout ?? CrossShardTransactionOptions.DefaultTimeout;
         _shardRegistry = shardRegistry ?? throw new ArgumentNullException(nameof(shardRegistry));
-        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        _participantFactory = participantFactory ?? throw new ArgumentNullException(nameof(participantFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _participantIsolationLevel = MapIsolationLevel(IsolationLevel);
         CreatedAt = DateTime.UtcNow;
 
         // Set up timeout handling
@@ -98,7 +130,9 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
             return; // Already enlisted
         }
 
-        // Validate shard exists (throws ShardNotFoundException if not found)
+        // Validate shard exists (throws ShardNotFoundException if not found).
+        // The shard registry accepts both default-group local ids ("EU") and
+        // fully-qualified ids ("hash8::0") — see ShardRegistry.
         _ = _shardRegistry.GetShard(shardId)
             ?? throw new ShardNotFoundException($"Shard '{shardId}' not found in registry.");
 
@@ -106,11 +140,13 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
     }
 
     /// <inheritdoc />
-    public async Task EnlistAsync(IShardMetadata shard, CancellationToken cancellationToken = default)
+    public Task EnlistAsync(IShardMetadata shard, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(shard);
 
-        await EnlistAsync(shard.ShardId, cancellationToken).ConfigureAwait(false);
+        // Use the fully-qualified id (group::id) so two shards with the same
+        // local id in different groups don't alias to one participant.
+        return EnlistAsync(shard.ToQualifiedId(), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -129,11 +165,22 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
 
         try
         {
-            // Phase 1: Prepare
-            await PrepareAllParticipantsAsync(linkedCts.Token).ConfigureAwait(false);
+            // Single-shard fast path: a transaction with exactly one
+            // participant doesn't gain anything from the prepare phase — the
+            // underlying EF Core local transaction is already atomic. Skip the
+            // 2PC overhead and commit directly.
+            if (_participants.Count == 1)
+            {
+                await CommitSingleShardAsync(linkedCts.Token).ConfigureAwait(false);
+            }
+            else
+            {
+                // Phase 1: Prepare
+                await PrepareAllParticipantsAsync(linkedCts.Token).ConfigureAwait(false);
 
-            // Phase 2: Commit
-            await CommitAllParticipantsAsync(linkedCts.Token).ConfigureAwait(false);
+                // Phase 2: Commit
+                await CommitAllParticipantsAsync(linkedCts.Token).ConfigureAwait(false);
+            }
 
             State = TransactionState.Committed;
             TransactionLogMessages.TransactionCommitted(_logger, TransactionId, _participants.Count);
@@ -179,7 +226,8 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
     }
 
     /// <summary>
-    /// Gets the participant for a shard, creating it if necessary.
+    /// Gets the participant for a shard, creating it if necessary. Accepts
+    /// either a default-group local id or a fully-qualified <c>group::id</c>.
     /// </summary>
     /// <param name="shardId">The shard identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -196,6 +244,22 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
         await EnlistAsync(shardId, cancellationToken).ConfigureAwait(false);
 
         return _participants[shardId];
+    }
+
+    /// <summary>
+    /// Gets the participant for a shard, creating it if necessary. Uses the
+    /// shard's <see cref="ShardIdentityExtensions.ToQualifiedId">qualified id</see>
+    /// so shards in different groups never alias.
+    /// </summary>
+    /// <param name="shard">The shard metadata.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The shard transaction participant.</returns>
+    public Task<ShardTransactionParticipant> GetOrCreateParticipantAsync(
+        IShardMetadata shard,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(shard);
+        return GetOrCreateParticipantAsync(shard.ToQualifiedId(), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -228,13 +292,14 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
 
     private async Task EnlistInternalAsync(string shardId, CancellationToken cancellationToken)
     {
-        var context = await _contextFactory(shardId, cancellationToken).ConfigureAwait(false);
-
-        // Start a database transaction
-        // Note: EF Core's BeginTransactionAsync doesn't support isolation level parameter directly.
-        // The isolation level should be set at the connection level or via raw SQL if needed.
-        var dbTransaction = await context.Database.BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
+        // The participant factory (provided by the EntityFramework layer)
+        // creates the context and begins the local transaction at the
+        // requested isolation level — relational providers honour it,
+        // in-memory ignores it gracefully.
+        var (context, dbTransaction) = await _participantFactory(
+            shardId,
+            _participantIsolationLevel,
+            cancellationToken).ConfigureAwait(false);
 
         var participant = new ShardTransactionParticipant(shardId, context, dbTransaction);
 
@@ -247,6 +312,18 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
         {
             TransactionLogMessages.EnlistedShard(_logger, shardId, TransactionId);
         }
+    }
+
+    private async Task CommitSingleShardAsync(CancellationToken cancellationToken)
+    {
+        var participant = _participants.Values.Single();
+
+        // Flush any pending operations and saved changes inside the local
+        // transaction. PrepareAsync does both for us — by skipping the multi-
+        // shard 2PC dance we still get the SaveChangesAsync inside the
+        // participant's transaction, then commit the single transaction.
+        await participant.PrepareAsync(cancellationToken).ConfigureAwait(false);
+        await participant.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task PrepareAllParticipantsAsync(CancellationToken cancellationToken)
