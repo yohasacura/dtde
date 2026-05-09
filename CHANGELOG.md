@@ -5,11 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0]
+## [Unreleased]
 
-> **Breaking release.** v2.0.0 collapses several redundant configuration paths
-> from v1.0.0 into a single canonical setup. The migration is straightforward
-> (5-10 lines per project); see "Migrating from 1.0.0" below.
+> **Breaking release in progress.** This entry collapses several redundant
+> configuration paths from v1.0.0 into a single canonical setup. The migration
+> is straightforward (5-10 lines per project); see "Migrating from 1.0.0" below.
+> The next published version number is to be decided.
 
 ### Why
 
@@ -17,7 +18,7 @@ A first-time user of v1.0 had to choose between two DI registration helpers,
 two entity-configuration paths (extension methods on `EntityTypeBuilder<T>` and
 `DtdeOptionsBuilder.ConfigureEntity<T>`), three shard-registration overloads
 plus an inline-on-builder option, and several `[Obsolete]` aliases for backward
-compatibility. v2.0.0 picks one of each.
+compatibility. This pass picks one of each.
 
 ### Added
 
@@ -94,9 +95,12 @@ compatibility. v2.0.0 picks one of each.
 For shard tiers, read-only flags, custom shard names, etc., the full
 `AddShard(s => s.WithId(...).WithTier(...).AsReadOnly())` form is unchanged.
 
-## [Unreleased]
+### Earlier polish (also unreleased)
 
-### Added
+The configuration cleanup above lands on top of an internal polish pass that
+also hasn't been published to NuGet yet:
+
+#### Added
 
 - **Production-grade NuGet packaging**
   - `Microsoft.CodeAnalysis.PublicApiAnalyzers` wired up with empty
