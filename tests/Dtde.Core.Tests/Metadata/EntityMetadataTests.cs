@@ -1,4 +1,5 @@
 using Dtde.Core.Metadata;
+using Dtde.Core.Temporal;
 
 namespace Dtde.Core.Tests.Metadata;
 
@@ -19,8 +20,8 @@ public class EntityMetadataTests
         Assert.Equal("TestEntities", metadata.TableName);
         Assert.Equal("dbo", metadata.SchemaName);
         Assert.Null(metadata.PrimaryKey);
-        Assert.Null(metadata.Validity);
-        Assert.Null(metadata.Sharding);
+        Assert.Null(metadata.TemporalConfiguration);
+        Assert.Null(metadata.ShardingConfiguration);
         Assert.False(metadata.IsTemporal);
         Assert.False(metadata.IsSharded);
     }
@@ -49,7 +50,7 @@ public class EntityMetadataTests
     [Fact]
     public void IsTemporal_ReturnsTrueWhenValidityConfigured()
     {
-        var validity = ValidityConfiguration.Create<TestTemporalEntity>(
+        var validity = TemporalConfiguration.Create<TestTemporalEntity>(
             e => e.ValidFrom,
             e => e.ValidTo);
 
@@ -57,7 +58,7 @@ public class EntityMetadataTests
             typeof(TestTemporalEntity),
             "TestTemporalEntities",
             "dbo",
-            validity: validity);
+            temporalConfiguration: validity);
 
         Assert.True(metadata.IsTemporal);
     }
@@ -74,7 +75,7 @@ public class EntityMetadataTests
             typeof(TestShardedEntity),
             "TestShardedEntities",
             "dbo",
-            sharding: sharding);
+            shardingConfiguration: sharding);
 
         Assert.True(metadata.IsSharded);
     }
@@ -145,10 +146,10 @@ public class EntityMetadataTests
             .HasValidity(e => e.ValidFrom, e => e.ValidTo)
             .Build();
 
-        Assert.NotNull(metadata.Validity);
+        Assert.NotNull(metadata.TemporalConfiguration);
         Assert.True(metadata.IsTemporal);
-        Assert.Equal("ValidFrom", metadata.Validity!.ValidFromProperty.PropertyName);
-        Assert.Equal("ValidTo", metadata.Validity!.ValidToProperty!.PropertyName);
+        Assert.Equal("ValidFrom", metadata.TemporalConfiguration!.ValidFromProperty.PropertyName);
+        Assert.Equal("ValidTo", metadata.TemporalConfiguration!.ValidToProperty!.PropertyName);
     }
 
     [Fact]
@@ -160,9 +161,9 @@ public class EntityMetadataTests
             .HasValidity(e => e.ValidFrom)
             .Build();
 
-        Assert.NotNull(metadata.Validity);
-        Assert.True(metadata.Validity!.IsOpenEnded);
-        Assert.Null(metadata.Validity.ValidToProperty);
+        Assert.NotNull(metadata.TemporalConfiguration);
+        Assert.True(metadata.TemporalConfiguration!.IsOpenEnded);
+        Assert.Null(metadata.TemporalConfiguration.ValidToProperty);
     }
 
     [Fact]
@@ -174,9 +175,9 @@ public class EntityMetadataTests
             .HasTemporalValidity("ValidFrom", "ValidTo")
             .Build();
 
-        Assert.NotNull(metadata.Validity);
-        Assert.Equal("ValidFrom", metadata.Validity!.ValidFromProperty.PropertyName);
-        Assert.Equal("ValidTo", metadata.Validity!.ValidToProperty!.PropertyName);
+        Assert.NotNull(metadata.TemporalConfiguration);
+        Assert.Equal("ValidFrom", metadata.TemporalConfiguration!.ValidFromProperty.PropertyName);
+        Assert.Equal("ValidTo", metadata.TemporalConfiguration!.ValidToProperty!.PropertyName);
     }
 
     [Fact]
@@ -188,8 +189,8 @@ public class EntityMetadataTests
             .HasTemporalValidity("ValidFrom")
             .Build();
 
-        Assert.NotNull(metadata.Validity);
-        Assert.True(metadata.Validity!.IsOpenEnded);
+        Assert.NotNull(metadata.TemporalConfiguration);
+        Assert.True(metadata.TemporalConfiguration!.IsOpenEnded);
     }
 
     [Fact]
@@ -206,7 +207,7 @@ public class EntityMetadataTests
             .WithSharding(sharding)
             .Build();
 
-        Assert.NotNull(metadata.Sharding);
+        Assert.NotNull(metadata.ShardingConfiguration);
         Assert.True(metadata.IsSharded);
     }
 
@@ -231,8 +232,8 @@ public class EntityMetadataTests
         Assert.Equal("Entities", metadata.TableName);
         Assert.Equal("app", metadata.SchemaName);
         Assert.NotNull(metadata.PrimaryKey);
-        Assert.NotNull(metadata.Validity);
-        Assert.NotNull(metadata.Sharding);
+        Assert.NotNull(metadata.TemporalConfiguration);
+        Assert.NotNull(metadata.ShardingConfiguration);
     }
 
     [Fact]
@@ -289,8 +290,8 @@ public class EntityMetadataTests
             .HasValidity(e => e.ValidFrom, e => e.ValidTo)
             .Build();
 
-        Assert.NotNull(metadata.Validity);
-        Assert.False(metadata.Validity!.IsOpenEnded);
+        Assert.NotNull(metadata.TemporalConfiguration);
+        Assert.False(metadata.TemporalConfiguration!.IsOpenEnded);
     }
 
     private class TestEntity

@@ -1,5 +1,6 @@
 using Dtde.Samples.HashSharding.Data;
 using Dtde.Samples.HashSharding.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -48,7 +49,7 @@ public class UsersController : ControllerBase
             })
             .FirstOrDefaultAsync();
 
-        if (user == null)
+        if (user is null)
             return NotFound();
 
         return Ok(user);
@@ -100,16 +101,16 @@ public class UsersController : ControllerBase
         var user = await _context.UserProfiles
             .FirstOrDefaultAsync(u => u.UserId == userId);
 
-        if (user == null)
+        if (user is null)
             return NotFound();
 
-        if (request.DisplayName != null)
+        if (request.DisplayName is not null)
             user.DisplayName = request.DisplayName;
-        if (request.AvatarUrl != null)
+        if (request.AvatarUrl is not null)
             user.AvatarUrl = request.AvatarUrl;
-        if (request.Bio != null)
+        if (request.Bio is not null)
             user.Bio = request.Bio;
-        if (request.Location != null)
+        if (request.Location is not null)
             user.Location = request.Location;
 
         await _context.SaveChangesAsync();
@@ -217,7 +218,7 @@ public class UsersController : ControllerBase
             .Where(u => u.UserId == userId)
             .FirstOrDefaultAsync();
 
-        if (user == null)
+        if (user is null)
             return NotFound();
 
         var sessions = await _context.UserSessions

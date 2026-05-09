@@ -312,3 +312,20 @@ __pycache__/
 .env
 .venv/
 venv/
+
+# =============================================================================
+# Claude Code (https://claude.com/claude-code)
+# =============================================================================
+# Worktrees Claude Code creates for isolated agent runs. Never commit these —
+# they always belong to a specific run on a specific machine.
+.claude/worktrees/
+
+# Per-developer settings (API tokens, personal preferences).
+.claude/settings.local.json
+.claude/.credentials.json
+
+# Transient session/runtime data the harness may emit alongside settings.
+.claude/cache/
+.claude/sessions/
+.claude/logs/
+.claude/.metrics/

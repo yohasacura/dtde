@@ -1,5 +1,6 @@
 using Dtde.Samples.Combined.Data;
 using Dtde.Samples.Combined.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -72,7 +73,7 @@ public class AuditsController : ControllerBase
             .Where(a => a.Id == auditId)
             .FirstOrDefaultAsync();
 
-        if (audit == null)
+        if (audit is null)
             return NotFound();
 
         return Ok(new AuditDetailDto
@@ -179,7 +180,7 @@ public class AuditsController : ControllerBase
         var audit = await _context.ComplianceAudits
             .FirstOrDefaultAsync(a => a.Id == auditId);
 
-        if (audit == null)
+        if (audit is null)
             return NotFound();
 
         audit.ReviewedAt = DateTime.UtcNow;

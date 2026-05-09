@@ -21,7 +21,7 @@ tests/
 ├── Dtde.Core.Tests/                    # Domain layer unit tests
 │   ├── Metadata/
 │   │   ├── EntityMetadataTests.cs
-│   │   ├── ValidityConfigurationTests.cs
+│   │   ├── TemporalConfigurationTests.cs
 │   │   ├── ShardMetadataTests.cs
 │   │   └── MetadataRegistryTests.cs
 │   ├── Sharding/
@@ -77,15 +77,15 @@ tests/
 ```csharp
 namespace Dtde.Core.Tests.Metadata;
 
-public class ValidityConfigurationTests
+public class TemporalConfigurationTests
 {
-    [Fact(DisplayName = "ValidityConfiguration with both properties creates correct predicate")]
+    [Fact(DisplayName = "TemporalConfiguration with both properties creates correct predicate")]
     public void BuildPredicate_WithBothProperties_CreatesCorrectPredicate()
     {
         // Arrange
         var validFrom = CreatePropertyMetadata<TestEntity>("EffectiveDate");
         var validTo = CreatePropertyMetadata<TestEntity>("ExpirationDate");
-        var config = new ValidityConfiguration(validFrom, validTo);
+        var config = new TemporalConfiguration(validFrom, validTo);
         var targetDate = new DateTime(2024, 6, 15);
         
         // Act
@@ -108,14 +108,14 @@ public class ValidityConfigurationTests
         compiled(invalidEntity).Should().BeFalse();
     }
     
-    [Fact(DisplayName = "ValidityConfiguration with only start property allows open-ended validity")]
+    [Fact(DisplayName = "TemporalConfiguration with only start property allows open-ended validity")]
     public void Constructor_WithOnlyStartProperty_AllowsOpenEndedValidity()
     {
         // Arrange
         var validFrom = CreatePropertyMetadata<TestEntity>("EffectiveDate");
         
         // Act
-        var config = new ValidityConfiguration(validFrom, validToProperty: null);
+        var config = new TemporalConfiguration(validFrom, validToProperty: null);
         
         // Assert
         config.ValidFromProperty.Should().NotBeNull();
@@ -123,12 +123,12 @@ public class ValidityConfigurationTests
         config.IsOpenEnded.Should().BeTrue();
     }
     
-    [Fact(DisplayName = "ValidityConfiguration BuildPredicate handles null end date correctly")]
+    [Fact(DisplayName = "TemporalConfiguration BuildPredicate handles null end date correctly")]
     public void BuildPredicate_WithOpenEnded_HandlesNullEndDate()
     {
         // Arrange
         var validFrom = CreatePropertyMetadata<TestEntity>("EffectiveDate");
-        var config = new ValidityConfiguration(validFrom);
+        var config = new TemporalConfiguration(validFrom);
         var targetDate = new DateTime(2024, 6, 15);
         
         // Act

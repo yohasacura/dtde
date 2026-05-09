@@ -1,5 +1,6 @@
 using Dtde.EntityFramework;
 using Dtde.Sample.WebApi.Entities;
+
 using Microsoft.EntityFrameworkCore;
 
 // This sample demonstrates mixed usage of:

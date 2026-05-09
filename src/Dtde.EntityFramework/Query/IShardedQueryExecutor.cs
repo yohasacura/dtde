@@ -12,7 +12,7 @@ public interface IShardedQueryExecutor
     /// <param name="query">The query to execute.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The merged results from all shards.</returns>
-    Task<IReadOnlyList<TEntity>> ExecuteAsync<TEntity>(
+    public Task<IReadOnlyList<TEntity>> ExecuteAsync<TEntity>(
         IQueryable<TEntity> query,
         CancellationToken cancellationToken = default) where TEntity : class;
 
@@ -25,7 +25,7 @@ public interface IShardedQueryExecutor
     /// <param name="aggregator">The function to aggregate results from shards.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The aggregated result.</returns>
-    Task<TResult> ExecuteScalarAsync<TEntity, TResult>(
+    public Task<TResult> ExecuteScalarAsync<TEntity, TResult>(
         IQueryable<TEntity> query,
         Func<IEnumerable<TResult>, TResult> aggregator,
         CancellationToken cancellationToken = default) where TEntity : class;

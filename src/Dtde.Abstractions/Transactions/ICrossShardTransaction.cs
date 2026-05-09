@@ -27,32 +27,32 @@ public interface ICrossShardTransaction : IAsyncDisposable
     /// <summary>
     /// Gets the unique identifier for this transaction.
     /// </summary>
-    string TransactionId { get; }
+    public string TransactionId { get; }
 
     /// <summary>
     /// Gets the current state of the transaction.
     /// </summary>
-    TransactionState State { get; }
+    public TransactionState State { get; }
 
     /// <summary>
     /// Gets the isolation level for this transaction.
     /// </summary>
-    CrossShardIsolationLevel IsolationLevel { get; }
+    public CrossShardIsolationLevel IsolationLevel { get; }
 
     /// <summary>
     /// Gets the transaction timeout duration.
     /// </summary>
-    TimeSpan Timeout { get; }
+    public TimeSpan Timeout { get; }
 
     /// <summary>
     /// Gets the timestamp when the transaction was created.
     /// </summary>
-    DateTime CreatedAt { get; }
+    public DateTime CreatedAt { get; }
 
     /// <summary>
     /// Gets the shards currently enlisted in this transaction.
     /// </summary>
-    IReadOnlyCollection<string> EnlistedShards { get; }
+    public IReadOnlyCollection<string> EnlistedShards { get; }
 
     /// <summary>
     /// Enlists a shard in this transaction.
@@ -61,7 +61,7 @@ public interface ICrossShardTransaction : IAsyncDisposable
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the enlist operation.</returns>
     /// <exception cref="InvalidOperationException">Thrown if the transaction is not in Active state.</exception>
-    Task EnlistAsync(string shardId, CancellationToken cancellationToken = default);
+    public Task EnlistAsync(string shardId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Enlists a shard using shard metadata.
@@ -69,7 +69,7 @@ public interface ICrossShardTransaction : IAsyncDisposable
     /// <param name="shard">The shard metadata.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the enlist operation.</returns>
-    Task EnlistAsync(IShardMetadata shard, CancellationToken cancellationToken = default);
+    public Task EnlistAsync(IShardMetadata shard, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Commits the transaction across all enlisted shards.
@@ -79,19 +79,19 @@ public interface ICrossShardTransaction : IAsyncDisposable
     /// <exception cref="Dtde.Abstractions.Exceptions.CrossShardTransactionException">
     /// Thrown if the transaction cannot be committed.
     /// </exception>
-    Task CommitAsync(CancellationToken cancellationToken = default);
+    public Task CommitAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Rolls back the transaction across all enlisted shards.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the rollback operation.</returns>
-    Task RollbackAsync(CancellationToken cancellationToken = default);
+    public Task RollbackAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the participant context for a specific shard.
     /// </summary>
     /// <param name="shardId">The shard identifier.</param>
     /// <returns>The participant context, or null if not enlisted.</returns>
-    ITransactionParticipant? GetParticipant(string shardId);
+    public ITransactionParticipant? GetParticipant(string shardId);
 }

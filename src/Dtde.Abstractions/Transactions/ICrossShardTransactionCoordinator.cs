@@ -53,19 +53,19 @@ public interface ICrossShardTransactionCoordinator
     /// <summary>
     /// Gets the current ambient transaction, if any.
     /// </summary>
-    ICrossShardTransaction? CurrentTransaction { get; }
+    public ICrossShardTransaction? CurrentTransaction { get; }
 
     /// <summary>
     /// Gets whether there is an active ambient transaction.
     /// </summary>
-    bool HasActiveTransaction => CurrentTransaction is not null;
+    public bool HasActiveTransaction => CurrentTransaction is not null;
 
     /// <summary>
     /// Begins a new cross-shard transaction with default options.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The new transaction.</returns>
-    Task<ICrossShardTransaction> BeginTransactionAsync(
+    public Task<ICrossShardTransaction> BeginTransactionAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -74,7 +74,7 @@ public interface ICrossShardTransactionCoordinator
     /// <param name="options">The transaction options.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The new transaction.</returns>
-    Task<ICrossShardTransaction> BeginTransactionAsync(
+    public Task<ICrossShardTransaction> BeginTransactionAsync(
         CrossShardTransactionOptions options,
         CancellationToken cancellationToken = default);
 
@@ -88,7 +88,7 @@ public interface ICrossShardTransactionCoordinator
     /// The transaction is automatically committed if the action completes successfully,
     /// or rolled back if an exception is thrown.
     /// </remarks>
-    Task ExecuteInTransactionAsync(
+    public Task ExecuteInTransactionAsync(
         Func<ICrossShardTransaction, Task> action,
         CancellationToken cancellationToken = default);
 
@@ -99,7 +99,7 @@ public interface ICrossShardTransactionCoordinator
     /// <param name="options">The transaction options.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the transaction.</returns>
-    Task ExecuteInTransactionAsync(
+    public Task ExecuteInTransactionAsync(
         Func<ICrossShardTransaction, Task> action,
         CrossShardTransactionOptions options,
         CancellationToken cancellationToken = default);
@@ -111,7 +111,7 @@ public interface ICrossShardTransactionCoordinator
     /// <param name="action">The action to execute.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The result of the action.</returns>
-    Task<TResult> ExecuteInTransactionAsync<TResult>(
+    public Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<ICrossShardTransaction, Task<TResult>> action,
         CancellationToken cancellationToken = default);
 
@@ -123,7 +123,7 @@ public interface ICrossShardTransactionCoordinator
     /// <param name="options">The transaction options.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The result of the action.</returns>
-    Task<TResult> ExecuteInTransactionAsync<TResult>(
+    public Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<ICrossShardTransaction, Task<TResult>> action,
         CrossShardTransactionOptions options,
         CancellationToken cancellationToken = default);
@@ -133,5 +133,5 @@ public interface ICrossShardTransactionCoordinator
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The number of transactions recovered.</returns>
-    Task<int> RecoverAsync(CancellationToken cancellationToken = default);
+    public Task<int> RecoverAsync(CancellationToken cancellationToken = default);
 }

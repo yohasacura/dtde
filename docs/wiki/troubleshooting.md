@@ -488,9 +488,9 @@ foreach (var shard in shards)
 // Log entity metadata
 var metadata = context.MetadataRegistry.GetEntityMetadata<Customer>();
 logger.LogDebug("Entity: {Type}, HasSharding: {Sharding}, HasTemporal: {Temporal}",
-    metadata?.EntityType.Name,
-    metadata?.ShardingConfiguration != null,
-    metadata?.ValidityConfiguration != null);
+    metadata?.ClrType.Name,
+    metadata?.IsSharded,
+    metadata?.IsTemporal);
 ```
 
 ### Report Issues

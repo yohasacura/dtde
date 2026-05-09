@@ -105,7 +105,7 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
 
         var transactionId = GenerateTransactionId(options.TransactionName);
 
-        TransactionLogMessages.BeginningTransactionWithOptions(_logger, transactionId, options.IsolationLevel.ToString());
+        TransactionLogMessages.BeginningTransactionWithOptions(_logger, transactionId, options.IsolationLevel);
 
         var transaction = new CrossShardTransaction(
             transactionId,

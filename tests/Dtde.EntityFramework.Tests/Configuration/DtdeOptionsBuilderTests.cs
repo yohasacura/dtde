@@ -21,9 +21,9 @@ public class DtdeOptionsBuilderTests
 
         var metadata = options.MetadataRegistry.GetEntityMetadata<TestEntity>();
         Assert.NotNull(metadata);
-        Assert.NotNull(metadata!.Validity);
-        Assert.Equal("ValidFrom", metadata.Validity!.ValidFromProperty.PropertyName);
-        Assert.Equal("ValidTo", metadata.Validity!.ValidToProperty!.PropertyName);
+        Assert.NotNull(metadata!.TemporalConfiguration);
+        Assert.Equal("ValidFrom", metadata.TemporalConfiguration!.ValidFromProperty.PropertyName);
+        Assert.Equal("ValidTo", metadata.TemporalConfiguration!.ValidToProperty!.PropertyName);
     }
 
     [Fact(DisplayName = "AddShard adds shard metadata to options")]

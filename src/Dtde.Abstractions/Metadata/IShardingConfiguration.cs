@@ -109,45 +109,45 @@ public interface IShardingConfiguration
     /// <summary>
     /// Gets the type of sharding strategy being used.
     /// </summary>
-    ShardingStrategyType StrategyType { get; }
+    public ShardingStrategyType StrategyType { get; }
 
     /// <summary>
     /// Gets the storage mode for shards (Tables, Databases, or Manual).
     /// </summary>
-    ShardStorageMode StorageMode { get; }
+    public ShardStorageMode StorageMode { get; }
 
     /// <summary>
     /// Gets the expression that determines the shard key.
     /// Can be a simple property or complex expression.
     /// </summary>
-    LambdaExpression? ShardKeyExpression { get; }
+    public LambdaExpression? ShardKeyExpression { get; }
 
     /// <summary>
     /// Gets the properties used as shard key(s).
     /// For composite strategies, multiple properties may be included.
     /// </summary>
-    IReadOnlyList<IPropertyMetadata> ShardKeyProperties { get; }
+    public IReadOnlyList<IPropertyMetadata> ShardKeyProperties { get; }
 
     /// <summary>
     /// Gets the concrete sharding strategy instance for shard resolution.
     /// </summary>
-    IShardingStrategy Strategy { get; }
+    public IShardingStrategy Strategy { get; }
 
     /// <summary>
     /// Gets whether migrations are enabled for this sharded entity.
     /// False for manual/pre-created tables.
     /// </summary>
-    bool MigrationsEnabled { get; }
+    public bool MigrationsEnabled { get; }
 
     /// <summary>
     /// Gets the table name pattern for table-based sharding.
     /// E.g., "{TableName}_{ShardKey}" produces "Customers_EU", "Customers_US".
     /// </summary>
-    string? TableNamePattern { get; }
+    public string? TableNamePattern { get; }
 
     /// <summary>
     /// Gets the date interval for date-based sharding.
     /// Only applicable when StrategyType is DateRange.
     /// </summary>
-    DateShardInterval? DateInterval { get; }
+    public DateShardInterval? DateInterval { get; }
 }

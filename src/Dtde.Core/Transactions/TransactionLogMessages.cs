@@ -1,9 +1,12 @@
+using Dtde.Abstractions.Transactions;
+
 using Microsoft.Extensions.Logging;
 
 namespace Dtde.Core.Transactions;
 
 /// <summary>
-/// High-performance logging messages for transaction operations using LoggerMessage source generation.
+/// Source-generated <see cref="LoggerMessage"/> definitions for the cross-shard
+/// transaction coordinator. Reserves event IDs <c>10001-10199</c>.
 /// </summary>
 internal static partial class TransactionLogMessages
 {
@@ -65,13 +68,13 @@ internal static partial class TransactionLogMessages
         EventId = 10010,
         Level = LogLevel.Warning,
         Message = "Cross-shard transaction {TransactionId} timed out in state {State}")]
-    public static partial void TransactionTimedOut(ILogger logger, string transactionId, string state);
+    public static partial void TransactionTimedOut(ILogger logger, string transactionId, TransactionState state);
 
     [LoggerMessage(
         EventId = 10011,
         Level = LogLevel.Debug,
         Message = "Beginning cross-shard transaction {TransactionId} with isolation level {IsolationLevel}")]
-    public static partial void BeginningTransactionWithOptions(ILogger logger, string transactionId, string isolationLevel);
+    public static partial void BeginningTransactionWithOptions(ILogger logger, string transactionId, CrossShardIsolationLevel isolationLevel);
 
     [LoggerMessage(
         EventId = 10012,

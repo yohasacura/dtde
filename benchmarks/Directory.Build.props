@@ -1,0 +1,33 @@
+<Project>
+
+  <!-- Inherit from root Directory.Build.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <RootNamespace>$(MSBuildProjectName)</RootNamespace>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredCompilation>true</TieredCompilation>
+  </PropertyGroup>
+
+  <!--
+    Benchmarks generate code at runtime via BenchmarkDotNet and intentionally trigger
+    rules that don't apply to library code. Suppress these for the whole tree.
+      CA1001 - BenchmarkDotNet lifecycle ([GlobalCleanup]) handles disposal
+      CA1002 - List<T> exposures fine for test data
+      CA1062 - Null validation not needed in internal benchmark helpers
+      CA1707 - Underscore naming improves benchmark method readability
+      CA1711 - Attribute suffix is semantic in benchmark entities
+      CA1822 - Helper methods kept as instance for ergonomic dispatch
+      CA1861 - Constant arrays in Bogus rules are acceptable
+      CA2007 - ConfigureAwait not needed
+      CA2227 - Collection setters fine for test entities
+      CA5394 - Security-level randomness not required for benchmarks
+  -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1001;CA1002;CA1062;CA1707;CA1711;CA1822;CA1861;CA2007;CA2227;CA5394</NoWarn>
+  </PropertyGroup>
+
+</Project>

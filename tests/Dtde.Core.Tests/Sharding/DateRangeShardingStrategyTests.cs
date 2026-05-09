@@ -1,5 +1,6 @@
 using Dtde.Abstractions.Exceptions;
 using Dtde.Abstractions.Metadata;
+using Dtde.Abstractions.Temporal;
 using Dtde.Core.Metadata;
 using Dtde.Core.Sharding;
 
@@ -337,20 +338,20 @@ public class DateRangeShardingStrategyTests
 
     private sealed class TestTemporalEntityMetadata : IEntityMetadata
     {
-        private readonly TestValidityConfiguration _validityConfig;
+        private readonly TestTemporalConfiguration _temporalConfig;
 
         public TestTemporalEntityMetadata(Type entityType)
         {
             ClrType = entityType;
-            _validityConfig = new TestValidityConfiguration(entityType);
+            _temporalConfig = new TestTemporalConfiguration(entityType);
         }
 
         public Type ClrType { get; }
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey => null;
-        public IValidityConfiguration? Validity => _validityConfig;
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration => _temporalConfig;
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => true;
         public bool IsSharded => false;
     }
@@ -366,8 +367,8 @@ public class DateRangeShardingStrategyTests
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey => null;
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => false;
         public bool IsSharded => false;
     }
@@ -386,17 +387,17 @@ public class DateRangeShardingStrategyTests
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey => null;
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding => _shardingConfig;
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration => _shardingConfig;
         public bool IsTemporal => false;
         public bool IsSharded => true;
     }
 
-    private sealed class TestValidityConfiguration : IValidityConfiguration
+    private sealed class TestTemporalConfiguration : ITemporalConfiguration
     {
         private readonly IPropertyMetadata _validFromProperty;
 
-        public TestValidityConfiguration(Type entityType)
+        public TestTemporalConfiguration(Type entityType)
         {
             var propInfo = entityType.GetProperty(nameof(TestTemporalEntity.ValidFrom))!;
             _validFromProperty = new TestPropertyMetadata(propInfo);

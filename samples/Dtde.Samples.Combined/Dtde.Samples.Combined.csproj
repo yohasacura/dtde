@@ -2,13 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <LangVersion>preview</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Dtde.Core\Dtde.Core.csproj" />
     <ProjectReference Include="..\..\src\Dtde.EntityFramework\Dtde.EntityFramework.csproj" />
   </ItemGroup>
 

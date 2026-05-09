@@ -270,11 +270,14 @@ public sealed class EntityMetadata : IEntityMetadata
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `EntityType` | `Type` | The CLR type |
-| `ShardingConfiguration` | `IShardingConfiguration?` | Sharding settings |
-| `ValidityConfiguration` | `IValidityConfiguration?` | Temporal settings |
-| `Properties` | `IReadOnlyList<IPropertyMetadata>` | Property metadata |
-| `Relations` | `IReadOnlyList<IRelationMetadata>` | Relationship metadata |
+| `ClrType` | `Type` | The CLR type of the entity. |
+| `TableName` | `string` | The database table name. |
+| `SchemaName` | `string` | The database schema name. |
+| `PrimaryKey` | `IPropertyMetadata?` | Primary-key property, or `null` if EF will infer it. |
+| `TemporalConfiguration` | `ITemporalConfiguration?` | Temporal-versioning configuration; `null` if the entity is not temporal. |
+| `ShardingConfiguration` | `IShardingConfiguration?` | Sharding configuration; `null` if the entity is not distributed. |
+| `IsTemporal` | `bool` | Convenience: `TemporalConfiguration is not null`. |
+| `IsSharded` | `bool` | Convenience: `ShardingConfiguration is not null`. |
 
 ### MetadataRegistry
 
@@ -826,11 +829,30 @@ namespace Dtde.Abstractions.Metadata;
 
 public interface IEntityMetadata
 {
-    Type EntityType { get; }
+    Type ClrType { get; }
+    string TableName { get; }
+    string SchemaName { get; }
+    IPropertyMetadata? PrimaryKey { get; }
+    ITemporalConfiguration? TemporalConfiguration { get; }
     IShardingConfiguration? ShardingConfiguration { get; }
-    IValidityConfiguration? ValidityConfiguration { get; }
-    IReadOnlyList<IPropertyMetadata> Properties { get; }
-    IReadOnlyList<IRelationMetadata> Relations { get; }
+    bool IsTemporal { get; }
+    bool IsSharded { get; }
+}
+```
+
+### ITemporalConfiguration
+
+```csharp
+namespace Dtde.Abstractions.Temporal;
+
+public interface ITemporalConfiguration
+{
+    IPropertyMetadata ValidFromProperty { get; }
+    IPropertyMetadata? ValidToProperty { get; }
+    bool IsOpenEnded { get; }
+    DateTime OpenEndedValue { get; }
+
+    Expression<Func<TEntity, bool>> BuildPredicate<TEntity>(DateTime pointInTime);
 }
 ```
 

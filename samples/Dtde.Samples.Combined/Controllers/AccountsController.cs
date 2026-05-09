@@ -1,5 +1,6 @@
 using Dtde.Samples.Combined.Data;
 using Dtde.Samples.Combined.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -72,7 +73,7 @@ public class AccountsController : ControllerBase
             .Where(a => a.AccountNumber == accountNumber)
             .FirstOrDefaultAsync();
 
-        if (account == null)
+        if (account is null)
             return NotFound();
 
         // Get recent transactions (cross-shard query to transaction shards)
@@ -184,7 +185,7 @@ public class AccountsController : ControllerBase
             .Where(a => a.AccountNumber == accountNumber)
             .FirstOrDefaultAsync();
 
-        if (account == null)
+        if (account is null)
             return NotFound();
 
         // Simulated history - real implementation would query temporal tables

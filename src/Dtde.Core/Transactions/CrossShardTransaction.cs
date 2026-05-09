@@ -361,7 +361,7 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
             return;
         }
 
-        TransactionLogMessages.TransactionTimedOut(_logger, TransactionId, currentState.ToString());
+        TransactionLogMessages.TransactionTimedOut(_logger, TransactionId, currentState);
 
         State = TransactionState.Failed;
     }

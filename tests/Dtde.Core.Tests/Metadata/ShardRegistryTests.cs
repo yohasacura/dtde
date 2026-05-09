@@ -1,5 +1,5 @@
-using Dtde.Core.Metadata;
 using Dtde.Abstractions.Metadata;
+using Dtde.Core.Metadata;
 
 namespace Dtde.Core.Tests.Metadata;
 

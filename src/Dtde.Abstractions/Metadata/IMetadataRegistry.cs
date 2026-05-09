@@ -51,36 +51,36 @@ public interface IMetadataRegistry
     /// </summary>
     /// <typeparam name="TEntity">The entity type.</typeparam>
     /// <returns>Entity metadata if configured, null otherwise.</returns>
-    IEntityMetadata? GetEntityMetadata<TEntity>() where TEntity : class;
+    public IEntityMetadata? GetEntityMetadata<TEntity>() where TEntity : class;
 
     /// <summary>
     /// Gets entity metadata by CLR type.
     /// </summary>
     /// <param name="entityType">The entity type.</param>
     /// <returns>Entity metadata if configured, null otherwise.</returns>
-    IEntityMetadata? GetEntityMetadata(Type entityType);
+    public IEntityMetadata? GetEntityMetadata(Type entityType);
 
     /// <summary>
     /// Gets all registered entity metadata.
     /// </summary>
     /// <returns>All entity metadata.</returns>
-    IReadOnlyList<IEntityMetadata> GetAllEntityMetadata();
+    public IReadOnlyList<IEntityMetadata> GetAllEntityMetadata();
 
     /// <summary>
     /// Gets relations for an entity type.
     /// </summary>
     /// <param name="entityType">The entity type.</param>
     /// <returns>Relations where the entity is parent or child.</returns>
-    IReadOnlyList<IRelationMetadata> GetRelations(Type entityType);
+    public IReadOnlyList<IRelationMetadata> GetRelations(Type entityType);
 
     /// <summary>
     /// Gets the shard registry.
     /// </summary>
-    IShardRegistry ShardRegistry { get; }
+    public IShardRegistry ShardRegistry { get; }
 
     /// <summary>
     /// Validates all registered metadata for consistency.
     /// </summary>
     /// <returns>Validation result with any errors or warnings.</returns>
-    MetadataValidationResult Validate();
+    public MetadataValidationResult Validate();
 }

@@ -1,4 +1,11 @@
-# DTDE Development Plan - Overview
+# DTDE Development Plan — Overview
+
+> **Design reference.** These documents capture DTDE's architecture, domain
+> model, and component boundaries as they exist in the shipped library. Use
+> them to understand *why* DTDE is structured the way it is. For end-user
+> documentation, prefer the [Wiki](../wiki/index.md) (API reference,
+> configuration) and the [Guides](../guides/index.md) (quickstarts and
+> task-oriented walkthroughs).
 
 ## Document Navigation
 

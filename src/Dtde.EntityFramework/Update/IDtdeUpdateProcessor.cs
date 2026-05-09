@@ -33,7 +33,7 @@ public interface IDtdeUpdateProcessor
     /// instead for transparent sharding support.
     /// </remarks>
     [Obsolete("Use DtdeDbContext.CreateNewVersion() followed by SaveChangesAsync() for transparent sharding support.")]
-    Task<TEntity> CreateNewVersionAsync<TEntity>(
+    public Task<TEntity> CreateNewVersionAsync<TEntity>(
         TEntity currentEntity,
         Action<TEntity> changes,
         DateTime effectiveDate,
@@ -50,7 +50,7 @@ public interface IDtdeUpdateProcessor
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The new version of the entity.</returns>
     [Obsolete("Use standard EF Core transactions with transparent sharding instead.")]
-    Task<TEntity> CreateNewVersionAsync<TEntity>(
+    public Task<TEntity> CreateNewVersionAsync<TEntity>(
         TEntity currentEntity,
         Action<TEntity> changes,
         DateTime effectiveDate,
@@ -65,7 +65,7 @@ public interface IDtdeUpdateProcessor
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The new versions of the entities.</returns>
     [Obsolete("Use DtdeDbContext.CreateNewVersion() for each entity followed by SaveChangesAsync() for transparent sharding support.")]
-    Task<IReadOnlyList<TEntity>> CreateNewVersionsAsync<TEntity>(
+    public Task<IReadOnlyList<TEntity>> CreateNewVersionsAsync<TEntity>(
         IEnumerable<(TEntity CurrentEntity, Action<TEntity> Changes, DateTime EffectiveDate)> updates,
         CancellationToken cancellationToken = default) where TEntity : class, new();
 
@@ -78,7 +78,7 @@ public interface IDtdeUpdateProcessor
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the operation.</returns>
     [Obsolete("Use DtdeDbContext.Terminate() followed by SaveChangesAsync() for transparent sharding support.")]
-    Task TerminateVersionAsync<TEntity>(
+    public Task TerminateVersionAsync<TEntity>(
         TEntity entity,
         DateTime terminationDate,
         CancellationToken cancellationToken = default) where TEntity : class;
@@ -92,7 +92,7 @@ public interface IDtdeUpdateProcessor
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the operation.</returns>
     [Obsolete("Use DtdeDbContext.Terminate() for each entity followed by SaveChangesAsync() for transparent sharding support.")]
-    Task TerminateVersionsAsync<TEntity>(
+    public Task TerminateVersionsAsync<TEntity>(
         IEnumerable<TEntity> entities,
         DateTime terminationDate,
         CancellationToken cancellationToken = default) where TEntity : class;
@@ -106,7 +106,7 @@ public interface IDtdeUpdateProcessor
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the operation.</returns>
     [Obsolete("Use DtdeDbContext.AddTemporal() followed by SaveChangesAsync() for transparent sharding support.")]
-    Task SaveNewEntityAsync<TEntity>(
+    public Task SaveNewEntityAsync<TEntity>(
         TEntity entity,
         DateTime effectiveFrom,
         CancellationToken cancellationToken = default) where TEntity : class;
@@ -119,7 +119,7 @@ public interface IDtdeUpdateProcessor
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the operation.</returns>
     [Obsolete("Use DtdeDbContext.AddTemporal() for each entity followed by SaveChangesAsync() for transparent sharding support.")]
-    Task SaveNewEntitiesAsync<TEntity>(
+    public Task SaveNewEntitiesAsync<TEntity>(
         IEnumerable<(TEntity Entity, DateTime EffectiveFrom)> entities,
         CancellationToken cancellationToken = default) where TEntity : class;
 
@@ -134,7 +134,7 @@ public interface IDtdeUpdateProcessor
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The new version of the entity on the target shard.</returns>
     [Obsolete("Use DtdeDbContext.CreateNewVersion() followed by SaveChangesAsync() for transparent cross-shard transfers.")]
-    Task<TEntity> TransferEntityAsync<TEntity>(
+    public Task<TEntity> TransferEntityAsync<TEntity>(
         TEntity entity,
         string targetShardId,
         DateTime effectiveDate,

@@ -155,7 +155,7 @@ Partition data by date for time-series workloads:
 ```csharp
 modelBuilder.Entity<Transaction>(entity =>
 {
-    entity.ShardByDate(t => t.TransactionDate, DateInterval.Month);
+    entity.ShardByDate(t => t.TransactionDate, DateShardInterval.Month);
 });
 ```
 
@@ -174,17 +174,23 @@ modelBuilder.Entity<UserProfile>(entity =>
 
 **Use cases:** High-volume data, preventing hotspots, horizontal scaling
 
-### Composite Sharding
+### Manual Sharding
 
-Combine strategies for complex scenarios:
+Map an entity to **pre-existing tables** managed by your DBA or a SQL project:
 
 ```csharp
 modelBuilder.Entity<Order>(entity =>
 {
-    entity.ShardBy(o => o.Region)
-          .ThenByDate(o => o.OrderDate);
+    entity.UseManualSharding(config =>
+    {
+        config.AddTable("dbo.Orders_2023", o => o.OrderDate.Year == 2023);
+        config.AddTable("dbo.Orders_2024", o => o.OrderDate.Year == 2024);
+        config.MigrationsEnabled = false;
+    });
 });
 ```
+
+**Use cases:** Brownfield databases, regulatory schemas you don't control, archive tables.
 
 ---
 
@@ -483,14 +489,14 @@ Explore working examples for each sharding strategy:
 ## 🧪 Testing
 
 ```bash
-# Run all tests (101 tests)
-dotnet test
+# Run the full suite (~403 tests across Core, EntityFramework, Integration)
+dotnet test -c Release
 
 # Run with coverage
-dotnet test --collect:"XPlat Code Coverage"
+dotnet test -c Release --collect:"XPlat Code Coverage"
 
-# Run specific test project
-dotnet test tests/Dtde.Core.Tests/
+# Run a single project
+dotnet test tests/Dtde.Core.Tests/Dtde.Core.Tests.csproj -c Release
 ```
 
 ---

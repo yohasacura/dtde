@@ -1,4 +1,5 @@
 using Dtde.Abstractions.Metadata;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Dtde.EntityFramework.Query;
@@ -17,7 +18,7 @@ public interface IShardContextFactory
     /// <param name="shardId">The shard identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A DbContext configured for the specified shard.</returns>
-    Task<DbContext> CreateContextAsync(string shardId, CancellationToken cancellationToken = default);
+    public Task<DbContext> CreateContextAsync(string shardId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a DbContext for the specified shard metadata.
@@ -26,7 +27,7 @@ public interface IShardContextFactory
     /// <param name="shard">The shard metadata.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A DbContext configured for the specified shard.</returns>
-    Task<DbContext> CreateContextAsync(IShardMetadata shard, CancellationToken cancellationToken = default);
+    public Task<DbContext> CreateContextAsync(IShardMetadata shard, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the connection string for a specific shard.
@@ -34,19 +35,19 @@ public interface IShardContextFactory
     /// </summary>
     /// <param name="shardId">The shard identifier.</param>
     /// <returns>The connection string.</returns>
-    string GetConnectionString(string shardId);
+    public string GetConnectionString(string shardId);
 
     /// <summary>
     /// Gets the table name for a specific shard (for table-level sharding).
     /// </summary>
     /// <param name="shardId">The shard identifier.</param>
     /// <returns>The table name, or null if using database-level sharding.</returns>
-    string? GetTableName(string shardId);
+    public string? GetTableName(string shardId);
 
     /// <summary>
     /// Gets the schema name for a specific shard (for table-level sharding).
     /// </summary>
     /// <param name="shardId">The shard identifier.</param>
     /// <returns>The schema name, or null if using default schema.</returns>
-    string? GetSchemaName(string shardId);
+    public string? GetSchemaName(string shardId);
 }

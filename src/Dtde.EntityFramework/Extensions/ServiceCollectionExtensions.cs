@@ -6,6 +6,7 @@ using Dtde.EntityFramework.Configuration;
 using Dtde.EntityFramework.Infrastructure;
 using Dtde.EntityFramework.Query;
 using Dtde.EntityFramework.Update;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;

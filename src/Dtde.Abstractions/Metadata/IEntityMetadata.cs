@@ -1,71 +1,56 @@
+using Dtde.Abstractions.Temporal;
+
 namespace Dtde.Abstractions.Metadata;
 
 /// <summary>
-/// Represents metadata configuration for a temporal and/or sharded entity.
-/// This is the primary aggregate for entity configuration in DTDE.
+/// Aggregate describing how a CLR entity type is mapped, sharded, and (optionally)
+/// version-tracked by DTDE. This is the primary read-side metadata model for
+/// downstream components such as the query rewriter and write router.
 /// </summary>
 public interface IEntityMetadata
 {
     /// <summary>
-    /// Gets the CLR type of the entity.
+    /// Gets the CLR <see cref="Type"/> of the entity.
     /// </summary>
-    Type ClrType { get; }
-
-    /// <summary>
-    /// Gets the CLR type of the entity (alias for ClrType).
-    /// </summary>
-    Type EntityType => ClrType;
+    public Type ClrType { get; }
 
     /// <summary>
     /// Gets the database table name for this entity.
     /// </summary>
-    string TableName { get; }
+    public string TableName { get; }
 
     /// <summary>
-    /// Gets the database schema name (default: "dbo").
+    /// Gets the database schema name (default: <c>"dbo"</c>).
     /// </summary>
-    string SchemaName { get; }
+    public string SchemaName { get; }
 
     /// <summary>
-    /// Gets the primary key property configuration.
-    /// May be null if not explicitly configured.
+    /// Gets the primary-key property configuration, or <see langword="null"/> when not
+    /// explicitly modelled (DTDE will fall back to EF Core's primary-key inference).
     /// </summary>
-    IPropertyMetadata? PrimaryKey { get; }
+    public IPropertyMetadata? PrimaryKey { get; }
 
     /// <summary>
-    /// Gets the primary key property configuration (alias for PrimaryKey).
+    /// Gets the temporal-versioning configuration, or <see langword="null"/> when the
+    /// entity is not temporal.
     /// </summary>
-    IPropertyMetadata? KeyProperty => PrimaryKey;
+    public ITemporalConfiguration? TemporalConfiguration { get; }
 
     /// <summary>
-    /// Gets the optional validity period configuration.
-    /// Null if entity is not temporal.
+    /// Gets the sharding configuration, or <see langword="null"/> when the entity is
+    /// not distributed.
     /// </summary>
-    IValidityConfiguration? Validity { get; }
+    public IShardingConfiguration? ShardingConfiguration { get; }
 
     /// <summary>
-    /// Gets the optional validity configuration (alias for Validity).
+    /// Gets a value indicating whether this entity supports temporal queries.
+    /// Equivalent to <c>TemporalConfiguration is not null</c>.
     /// </summary>
-    IValidityConfiguration? ValidityConfiguration => Validity;
+    public bool IsTemporal { get; }
 
     /// <summary>
-    /// Gets the optional sharding configuration.
-    /// Null if entity is not sharded.
+    /// Gets a value indicating whether this entity is distributed across shards.
+    /// Equivalent to <c>ShardingConfiguration is not null</c>.
     /// </summary>
-    IShardingConfiguration? Sharding { get; }
-
-    /// <summary>
-    /// Gets the optional sharding configuration (alias for Sharding).
-    /// </summary>
-    IShardingConfiguration? ShardingConfiguration => Sharding;
-
-    /// <summary>
-    /// Gets whether this entity supports temporal queries.
-    /// </summary>
-    bool IsTemporal { get; }
-
-    /// <summary>
-    /// Gets whether this entity is distributed across shards.
-    /// </summary>
-    bool IsSharded { get; }
+    public bool IsSharded { get; }
 }

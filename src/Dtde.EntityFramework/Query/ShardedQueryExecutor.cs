@@ -1,7 +1,9 @@
 using System.Linq.Expressions;
+
 using Dtde.Abstractions.Metadata;
 using Dtde.Abstractions.Temporal;
 using Dtde.EntityFramework.Diagnostics;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 

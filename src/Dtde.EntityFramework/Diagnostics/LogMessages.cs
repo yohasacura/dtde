@@ -1,10 +1,23 @@
 using Dtde.Abstractions.Metadata;
+
 using Microsoft.Extensions.Logging;
 
 namespace Dtde.EntityFramework.Diagnostics;
 
 /// <summary>
-/// High-performance logging messages using LoggerMessage source generation.
+/// Source-generated <see cref="LoggerMessage"/> definitions for the EF Core layer.
+/// Reserves event IDs <c>1000-9999</c>:
+/// <list type="bullet">
+///   <item><description><c>1000-1999</c> — query execution and shard routing.</description></item>
+///   <item><description><c>2000-2999</c> — write routing.</description></item>
+///   <item><description><c>3000-3999</c> — context factory lifecycle.</description></item>
+///   <item><description><c>4000-4999</c> — temporal version operations.</description></item>
+///   <item><description><c>6000-6999</c> — batch and entity-transfer operations.</description></item>
+///   <item><description><c>7000-7999</c> — automatic cross-shard detection and transparent sessions.</description></item>
+/// </list>
+/// Cross-shard transaction lifecycle events (<c>10000-10199</c>) are emitted by
+/// <see cref="Dtde.Core.Transactions.CrossShardTransactionCoordinator"/> via its
+/// own dedicated <c>TransactionLogMessages</c>; do not duplicate them here.
 /// </summary>
 internal static partial class LogMessages
 {
@@ -151,78 +164,10 @@ internal static partial class LogMessages
         Message = "Cross-shard transaction completed successfully between shards {ShardId1} and {ShardId2}")]
     public static partial void CrossShardTransactionCompleted(ILogger logger, string shardId1, string shardId2);
 
-    // Cross-shard transaction messages
-    [LoggerMessage(
-        EventId = 5001,
-        Level = LogLevel.Debug,
-        Message = "Beginning cross-shard transaction {TransactionId}")]
-    public static partial void BeginningCrossShardTransaction(ILogger logger, string transactionId);
-
-    [LoggerMessage(
-        EventId = 5002,
-        Level = LogLevel.Debug,
-        Message = "Enlisting shard {ShardId} in transaction {TransactionId}")]
-    public static partial void EnlistingShard(ILogger logger, string shardId, string transactionId);
-
-    [LoggerMessage(
-        EventId = 5003,
-        Level = LogLevel.Debug,
-        Message = "Preparing transaction {TransactionId} with {ParticipantCount} participants")]
-    public static partial void PreparingTransaction(ILogger logger, string transactionId, int participantCount);
-
-    [LoggerMessage(
-        EventId = 5004,
-        Level = LogLevel.Debug,
-        Message = "Participant {ShardId} voted {Vote} in transaction {TransactionId}")]
-    public static partial void ParticipantVoted(ILogger logger, string shardId, string vote, string transactionId);
-
-    [LoggerMessage(
-        EventId = 5005,
-        Level = LogLevel.Information,
-        Message = "Committing cross-shard transaction {TransactionId} across {ShardCount} shards")]
-    public static partial void CommittingCrossShardTransaction(ILogger logger, string transactionId, int shardCount);
-
-    [LoggerMessage(
-        EventId = 5006,
-        Level = LogLevel.Information,
-        Message = "Cross-shard transaction {TransactionId} committed successfully")]
-    public static partial void CrossShardTransactionCommitted(ILogger logger, string transactionId);
-
-    [LoggerMessage(
-        EventId = 5007,
-        Level = LogLevel.Warning,
-        Message = "Rolling back cross-shard transaction {TransactionId}")]
-    public static partial void RollingBackCrossShardTransaction(ILogger logger, string transactionId);
-
-    [LoggerMessage(
-        EventId = 5008,
-        Level = LogLevel.Information,
-        Message = "Cross-shard transaction {TransactionId} rolled back")]
-    public static partial void CrossShardTransactionRolledBack(ILogger logger, string transactionId);
-
-    [LoggerMessage(
-        EventId = 5009,
-        Level = LogLevel.Error,
-        Message = "Cross-shard transaction {TransactionId} failed in prepare phase. {FailedCount} participant(s) voted abort")]
-    public static partial void TransactionPrepareFailed(ILogger logger, string transactionId, int failedCount);
-
-    [LoggerMessage(
-        EventId = 5010,
-        Level = LogLevel.Error,
-        Message = "Cross-shard transaction {TransactionId} failed in commit phase. {CommittedCount} committed, {FailedCount} failed")]
-    public static partial void TransactionCommitFailed(ILogger logger, string transactionId, int committedCount, int failedCount);
-
-    [LoggerMessage(
-        EventId = 5011,
-        Level = LogLevel.Warning,
-        Message = "Cross-shard transaction {TransactionId} timed out after {TimeoutSeconds} seconds")]
-    public static partial void TransactionTimedOut(ILogger logger, string transactionId, double timeoutSeconds);
-
-    [LoggerMessage(
-        EventId = 5012,
-        Level = LogLevel.Debug,
-        Message = "Retrying cross-shard transaction operation (attempt {Attempt}/{MaxAttempts})")]
-    public static partial void RetryingTransaction(ILogger logger, int attempt, int maxAttempts);
+    // Cross-shard transaction lifecycle events live in
+    // Dtde.Core.Transactions.TransactionLogMessages (event IDs 10000-10199).
+    // The 5000 range is intentionally reserved for any future EF-Core-layer
+    // cross-shard concerns that don't belong in the coordinator.
 
     // Batch operation messages
     [LoggerMessage(

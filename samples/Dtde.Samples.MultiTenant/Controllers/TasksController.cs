@@ -1,6 +1,7 @@
 using Dtde.Samples.MultiTenant.Data;
 using Dtde.Samples.MultiTenant.Entities;
 using Dtde.Samples.MultiTenant.Services;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -94,7 +95,7 @@ public class TasksController : ControllerBase
             .Where(t => t.TenantId == tenantId && t.Id == taskId)
             .FirstOrDefaultAsync();
 
-        if (task == null)
+        if (task is null)
             return NotFound();
 
         var comments = await _context.TaskComments
@@ -185,22 +186,22 @@ public class TasksController : ControllerBase
             .Where(t => t.TenantId == tenantId && t.Id == taskId)
             .FirstOrDefaultAsync();
 
-        if (task == null)
+        if (task is null)
             return NotFound();
 
-        if (request.Title != null)
+        if (request.Title is not null)
             task.Title = request.Title;
-        if (request.Description != null)
+        if (request.Description is not null)
             task.Description = request.Description;
-        if (request.Status != null)
+        if (request.Status is not null)
         {
             task.Status = request.Status;
             if (request.Status == "Done")
                 task.CompletedAt = DateTime.UtcNow;
         }
-        if (request.Priority != null)
+        if (request.Priority is not null)
             task.Priority = request.Priority;
-        if (request.AssigneeId != null)
+        if (request.AssigneeId is not null)
             task.AssigneeId = request.AssigneeId;
         if (request.DueDate.HasValue)
             task.DueDate = request.DueDate;

@@ -1,19 +1,70 @@
 <Project>
+
   <!-- Inherit from root Directory.Build.props -->
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 
-  <!-- NuGet package settings for publishable projects -->
+  <!-- ================================================================== -->
+  <!--  Library defaults                                                  -->
+  <!-- ================================================================== -->
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Description>Distributed Temporal Data Engine - A high-performance library for managing temporal data with advanced sharding capabilities in .NET applications.</Description>
-    <PackageTags>temporal;sharding;entity-framework;ef-core;database;dotnet;distributed;ddd;cqrs</PackageTags>
+    <CLSCompliant>true</CLSCompliant>
+    <!--
+      Trim/AOT support is a roadmap item: DTDE relies on Expression.Property
+      and Type.GetProperty for dynamic entity-shape introspection. Annotating
+      every public surface with DynamicallyAccessedMembers is tracked as a
+      follow-up. Until then, do not advertise AOT/trim safety.
+    -->
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <!-- ================================================================== -->
+  <!--  Package metadata shared by all packable libraries                 -->
+  <!-- ================================================================== -->
+  <PropertyGroup>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
-  <!-- Include readme and icon in package -->
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="\" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)../assets/icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
+
+  <!-- ================================================================== -->
+  <!--  Package validation (catches breaking changes vs published baseline)-->
+  <!--  https://learn.microsoft.com/dotnet/fundamentals/apicompat/package-validation/overview -->
+  <!--  Enabled when PackageValidationBaselineVersion is supplied at pack -->
+  <!-- ================================================================== -->
+  <PropertyGroup Condition="'$(PackageValidationBaselineVersion)' != ''">
+    <EnablePackageValidation>true</EnablePackageValidation>
+  </PropertyGroup>
+
+  <!-- ================================================================== -->
+  <!--  Strong naming is opt-in via -p:SignAssembly=true -p:AssemblyOriginatorKeyFile=path -->
+  <!-- ================================================================== -->
+  <PropertyGroup Condition="'$(SignAssembly)' == 'true'">
+    <DelaySign>false</DelaySign>
+    <PublicSign>false</PublicSign>
+  </PropertyGroup>
+
+  <!-- ================================================================== -->
+  <!--  Public-API surface tracking                                       -->
+  <!--  https://github.com/dotnet/roslyn-analyzers/tree/main/src/PublicApiAnalyzers -->
+  <!--  Each project supplies its own PublicAPI.Shipped.txt and          -->
+  <!--  PublicAPI.Unshipped.txt; the analyzer fails the build on any     -->
+  <!--  public surface change that isn't recorded.                       -->
+  <!-- ================================================================== -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" Condition="Exists('PublicAPI.Shipped.txt')" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" Condition="Exists('PublicAPI.Unshipped.txt')" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Condition="Exists('$(MSBuildThisFileDirectory)BannedSymbols.txt')" />
+  </ItemGroup>
+
 </Project>

@@ -1,5 +1,6 @@
 using Dtde.EntityFramework.Extensions;
 using Dtde.Samples.HashSharding.Data;
+
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,7 +30,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseAuthorization();
 app.MapControllers();
 
 // Ensure database is created

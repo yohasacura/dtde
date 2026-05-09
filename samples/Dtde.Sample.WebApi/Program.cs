@@ -3,6 +3,7 @@ using Dtde.Core.Metadata;
 using Dtde.EntityFramework.Extensions;
 using Dtde.Sample.WebApi.Data;
 using Dtde.Sample.WebApi.Entities;
+
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);

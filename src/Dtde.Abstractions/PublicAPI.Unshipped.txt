@@ -1,0 +1,271 @@
+#nullable enable
+Dtde.Abstractions.Exceptions.CrossShardTransactionException
+Dtde.Abstractions.Exceptions.CrossShardTransactionException.CrossShardTransactionException() -> void
+Dtde.Abstractions.Exceptions.CrossShardTransactionException.CrossShardTransactionException(string! message) -> void
+Dtde.Abstractions.Exceptions.CrossShardTransactionException.CrossShardTransactionException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.CrossShardTransactionException.CrossShardTransactionException(string! message, string? transactionId, System.Collections.Generic.IReadOnlyCollection<string!>? involvedShards = null, System.Collections.Generic.IReadOnlyCollection<string!>? failedShards = null) -> void
+Dtde.Abstractions.Exceptions.CrossShardTransactionException.CrossShardTransactionException(string! message, string? transactionId, System.Collections.Generic.IReadOnlyCollection<string!>? involvedShards, System.Collections.Generic.IReadOnlyCollection<string!>? failedShards, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.CrossShardTransactionException.FailedShards.get -> System.Collections.Generic.IReadOnlyCollection<string!>?
+Dtde.Abstractions.Exceptions.CrossShardTransactionException.InvolvedShards.get -> System.Collections.Generic.IReadOnlyCollection<string!>?
+Dtde.Abstractions.Exceptions.CrossShardTransactionException.TransactionId.get -> string?
+Dtde.Abstractions.Exceptions.DtdeException
+Dtde.Abstractions.Exceptions.DtdeException.DtdeException() -> void
+Dtde.Abstractions.Exceptions.DtdeException.DtdeException(string! message) -> void
+Dtde.Abstractions.Exceptions.DtdeException.DtdeException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.MetadataConfigurationException
+Dtde.Abstractions.Exceptions.MetadataConfigurationException.MetadataConfigurationException() -> void
+Dtde.Abstractions.Exceptions.MetadataConfigurationException.MetadataConfigurationException(string! message) -> void
+Dtde.Abstractions.Exceptions.MetadataConfigurationException.MetadataConfigurationException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.ShardNotFoundException
+Dtde.Abstractions.Exceptions.ShardNotFoundException.ShardNotFoundException() -> void
+Dtde.Abstractions.Exceptions.ShardNotFoundException.ShardNotFoundException(string! message) -> void
+Dtde.Abstractions.Exceptions.ShardNotFoundException.ShardNotFoundException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.TemporalOperationException
+Dtde.Abstractions.Exceptions.TemporalOperationException.TemporalOperationException() -> void
+Dtde.Abstractions.Exceptions.TemporalOperationException.TemporalOperationException(string! message) -> void
+Dtde.Abstractions.Exceptions.TemporalOperationException.TemporalOperationException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.TransactionCommitException
+Dtde.Abstractions.Exceptions.TransactionCommitException.CommittedShards.get -> System.Collections.Generic.IReadOnlyCollection<string!>?
+Dtde.Abstractions.Exceptions.TransactionCommitException.TransactionCommitException() -> void
+Dtde.Abstractions.Exceptions.TransactionCommitException.TransactionCommitException(string! message) -> void
+Dtde.Abstractions.Exceptions.TransactionCommitException.TransactionCommitException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.TransactionCommitException.TransactionCommitException(string! message, string! transactionId, System.Collections.Generic.IReadOnlyCollection<string!>? committedShards, System.Collections.Generic.IReadOnlyCollection<string!>? failedShards, System.Exception? innerException = null) -> void
+Dtde.Abstractions.Exceptions.TransactionPrepareException
+Dtde.Abstractions.Exceptions.TransactionPrepareException.FailedShardId.get -> string?
+Dtde.Abstractions.Exceptions.TransactionPrepareException.TransactionPrepareException() -> void
+Dtde.Abstractions.Exceptions.TransactionPrepareException.TransactionPrepareException(string! message) -> void
+Dtde.Abstractions.Exceptions.TransactionPrepareException.TransactionPrepareException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.TransactionPrepareException.TransactionPrepareException(string! message, string! transactionId, string! failedShardId, System.Exception? innerException = null) -> void
+Dtde.Abstractions.Exceptions.TransactionTimeoutException
+Dtde.Abstractions.Exceptions.TransactionTimeoutException.Timeout.get -> System.TimeSpan
+Dtde.Abstractions.Exceptions.TransactionTimeoutException.TransactionTimeoutException() -> void
+Dtde.Abstractions.Exceptions.TransactionTimeoutException.TransactionTimeoutException(string! message) -> void
+Dtde.Abstractions.Exceptions.TransactionTimeoutException.TransactionTimeoutException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.TransactionTimeoutException.TransactionTimeoutException(string! transactionId, System.TimeSpan timeout) -> void
+Dtde.Abstractions.Exceptions.VersionConflictException
+Dtde.Abstractions.Exceptions.VersionConflictException.EntityKey.get -> object?
+Dtde.Abstractions.Exceptions.VersionConflictException.EntityType.get -> System.Type?
+Dtde.Abstractions.Exceptions.VersionConflictException.VersionConflictException() -> void
+Dtde.Abstractions.Exceptions.VersionConflictException.VersionConflictException(string! message) -> void
+Dtde.Abstractions.Exceptions.VersionConflictException.VersionConflictException(string! message, System.Exception! innerException) -> void
+Dtde.Abstractions.Exceptions.VersionConflictException.VersionConflictException(string! message, System.Type! entityType, object? entityKey) -> void
+Dtde.Abstractions.Metadata.DateRange
+Dtde.Abstractions.Metadata.DateRange.Contains(System.DateTime date) -> bool
+Dtde.Abstractions.Metadata.DateRange.DateRange() -> void
+Dtde.Abstractions.Metadata.DateRange.DateRange(System.DateTime Start, System.DateTime End) -> void
+Dtde.Abstractions.Metadata.DateRange.Deconstruct(out System.DateTime Start, out System.DateTime End) -> void
+Dtde.Abstractions.Metadata.DateRange.End.get -> System.DateTime
+Dtde.Abstractions.Metadata.DateRange.End.init -> void
+Dtde.Abstractions.Metadata.DateRange.Equals(Dtde.Abstractions.Metadata.DateRange other) -> bool
+Dtde.Abstractions.Metadata.DateRange.Intersection(Dtde.Abstractions.Metadata.DateRange other) -> Dtde.Abstractions.Metadata.DateRange?
+Dtde.Abstractions.Metadata.DateRange.Intersects(Dtde.Abstractions.Metadata.DateRange other) -> bool
+Dtde.Abstractions.Metadata.DateRange.Start.get -> System.DateTime
+Dtde.Abstractions.Metadata.DateRange.Start.init -> void
+Dtde.Abstractions.Metadata.DateShardInterval
+Dtde.Abstractions.Metadata.DateShardInterval.Day = 0 -> Dtde.Abstractions.Metadata.DateShardInterval
+Dtde.Abstractions.Metadata.DateShardInterval.Month = 1 -> Dtde.Abstractions.Metadata.DateShardInterval
+Dtde.Abstractions.Metadata.DateShardInterval.Quarter = 2 -> Dtde.Abstractions.Metadata.DateShardInterval
+Dtde.Abstractions.Metadata.DateShardInterval.Year = 3 -> Dtde.Abstractions.Metadata.DateShardInterval
+Dtde.Abstractions.Metadata.IEntityMetadata
+Dtde.Abstractions.Metadata.IEntityMetadata.ClrType.get -> System.Type!
+Dtde.Abstractions.Metadata.IEntityMetadata.IsSharded.get -> bool
+Dtde.Abstractions.Metadata.IEntityMetadata.IsTemporal.get -> bool
+Dtde.Abstractions.Metadata.IEntityMetadata.PrimaryKey.get -> Dtde.Abstractions.Metadata.IPropertyMetadata?
+Dtde.Abstractions.Metadata.IEntityMetadata.SchemaName.get -> string!
+Dtde.Abstractions.Metadata.IEntityMetadata.ShardingConfiguration.get -> Dtde.Abstractions.Metadata.IShardingConfiguration?
+Dtde.Abstractions.Metadata.IEntityMetadata.TableName.get -> string!
+Dtde.Abstractions.Metadata.IEntityMetadata.TemporalConfiguration.get -> Dtde.Abstractions.Temporal.ITemporalConfiguration?
+Dtde.Abstractions.Metadata.IMetadataRegistry
+Dtde.Abstractions.Metadata.IMetadataRegistry.GetAllEntityMetadata() -> System.Collections.Generic.IReadOnlyList<Dtde.Abstractions.Metadata.IEntityMetadata!>!
+Dtde.Abstractions.Metadata.IMetadataRegistry.GetEntityMetadata(System.Type! entityType) -> Dtde.Abstractions.Metadata.IEntityMetadata?
+Dtde.Abstractions.Metadata.IMetadataRegistry.GetEntityMetadata<TEntity>() -> Dtde.Abstractions.Metadata.IEntityMetadata?
+Dtde.Abstractions.Metadata.IMetadataRegistry.GetRelations(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<Dtde.Abstractions.Metadata.IRelationMetadata!>!
+Dtde.Abstractions.Metadata.IMetadataRegistry.ShardRegistry.get -> Dtde.Abstractions.Metadata.IShardRegistry!
+Dtde.Abstractions.Metadata.IMetadataRegistry.Validate() -> Dtde.Abstractions.Metadata.MetadataValidationResult!
+Dtde.Abstractions.Metadata.IPropertyMetadata
+Dtde.Abstractions.Metadata.IPropertyMetadata.ColumnName.get -> string!
+Dtde.Abstractions.Metadata.IPropertyMetadata.GetValue(object! entity) -> object?
+Dtde.Abstractions.Metadata.IPropertyMetadata.PropertyInfo.get -> System.Reflection.PropertyInfo!
+Dtde.Abstractions.Metadata.IPropertyMetadata.PropertyName.get -> string!
+Dtde.Abstractions.Metadata.IPropertyMetadata.PropertyType.get -> System.Type!
+Dtde.Abstractions.Metadata.IPropertyMetadata.SetValue(object! entity, object? value) -> void
+Dtde.Abstractions.Metadata.IRelationMetadata
+Dtde.Abstractions.Metadata.IRelationMetadata.ChildEntity.get -> Dtde.Abstractions.Metadata.IEntityMetadata!
+Dtde.Abstractions.Metadata.IRelationMetadata.ChildForeignKey.get -> Dtde.Abstractions.Metadata.IPropertyMetadata!
+Dtde.Abstractions.Metadata.IRelationMetadata.ContainmentRule.get -> Dtde.Abstractions.Metadata.TemporalContainmentRule
+Dtde.Abstractions.Metadata.IRelationMetadata.ParentEntity.get -> Dtde.Abstractions.Metadata.IEntityMetadata!
+Dtde.Abstractions.Metadata.IRelationMetadata.ParentKey.get -> Dtde.Abstractions.Metadata.IPropertyMetadata!
+Dtde.Abstractions.Metadata.IRelationMetadata.RelationType.get -> Dtde.Abstractions.Metadata.RelationType
+Dtde.Abstractions.Metadata.IShardMetadata
+Dtde.Abstractions.Metadata.IShardMetadata.ConnectionString.get -> string?
+Dtde.Abstractions.Metadata.IShardMetadata.DateRange.get -> Dtde.Abstractions.Metadata.DateRange?
+Dtde.Abstractions.Metadata.IShardMetadata.IsActive.get -> bool
+Dtde.Abstractions.Metadata.IShardMetadata.IsReadOnly.get -> bool
+Dtde.Abstractions.Metadata.IShardMetadata.KeyRange.get -> Dtde.Abstractions.Metadata.KeyRange?
+Dtde.Abstractions.Metadata.IShardMetadata.Name.get -> string!
+Dtde.Abstractions.Metadata.IShardMetadata.Priority.get -> int
+Dtde.Abstractions.Metadata.IShardMetadata.SchemaName.get -> string?
+Dtde.Abstractions.Metadata.IShardMetadata.ShardId.get -> string!
+Dtde.Abstractions.Metadata.IShardMetadata.ShardKeyValue.get -> string?
+Dtde.Abstractions.Metadata.IShardMetadata.StorageMode.get -> Dtde.Abstractions.Metadata.ShardStorageMode
+Dtde.Abstractions.Metadata.IShardMetadata.TableName.get -> string?
+Dtde.Abstractions.Metadata.IShardMetadata.Tier.get -> Dtde.Abstractions.Metadata.ShardTier
+Dtde.Abstractions.Metadata.IShardRegistry
+Dtde.Abstractions.Metadata.IShardRegistry.GetAllShards() -> System.Collections.Generic.IReadOnlyList<Dtde.Abstractions.Metadata.IShardMetadata!>!
+Dtde.Abstractions.Metadata.IShardRegistry.GetShard(string! shardId) -> Dtde.Abstractions.Metadata.IShardMetadata?
+Dtde.Abstractions.Metadata.IShardRegistry.GetShardsByTier(Dtde.Abstractions.Metadata.ShardTier tier) -> System.Collections.Generic.IReadOnlyList<Dtde.Abstractions.Metadata.IShardMetadata!>!
+Dtde.Abstractions.Metadata.IShardRegistry.GetShardsForDateRange(System.DateTime startDate, System.DateTime endDate) -> System.Collections.Generic.IReadOnlyList<Dtde.Abstractions.Metadata.IShardMetadata!>!
+Dtde.Abstractions.Metadata.IShardRegistry.GetWritableShards() -> System.Collections.Generic.IReadOnlyList<Dtde.Abstractions.Metadata.IShardMetadata!>!
+Dtde.Abstractions.Metadata.IShardingConfiguration
+Dtde.Abstractions.Metadata.IShardingConfiguration.DateInterval.get -> Dtde.Abstractions.Metadata.DateShardInterval?
+Dtde.Abstractions.Metadata.IShardingConfiguration.MigrationsEnabled.get -> bool
+Dtde.Abstractions.Metadata.IShardingConfiguration.ShardKeyExpression.get -> System.Linq.Expressions.LambdaExpression?
+Dtde.Abstractions.Metadata.IShardingConfiguration.ShardKeyProperties.get -> System.Collections.Generic.IReadOnlyList<Dtde.Abstractions.Metadata.IPropertyMetadata!>!
+Dtde.Abstractions.Metadata.IShardingConfiguration.StorageMode.get -> Dtde.Abstractions.Metadata.ShardStorageMode
+Dtde.Abstractions.Metadata.IShardingConfiguration.Strategy.get -> Dtde.Abstractions.Metadata.IShardingStrategy!
+Dtde.Abstractions.Metadata.IShardingConfiguration.StrategyType.get -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.IShardingConfiguration.TableNamePattern.get -> string?
+Dtde.Abstractions.Metadata.IShardingStrategy
+Dtde.Abstractions.Metadata.IShardingStrategy.ResolveShards(Dtde.Abstractions.Metadata.IEntityMetadata! entity, Dtde.Abstractions.Metadata.IShardRegistry! shardRegistry, System.Collections.Generic.IReadOnlyDictionary<string!, object?>! predicates, System.DateTime? temporalContext) -> System.Collections.Generic.IReadOnlyList<Dtde.Abstractions.Metadata.IShardMetadata!>!
+Dtde.Abstractions.Metadata.IShardingStrategy.ResolveWriteShard(Dtde.Abstractions.Metadata.IEntityMetadata! entity, Dtde.Abstractions.Metadata.IShardRegistry! shardRegistry, object! entityInstance) -> Dtde.Abstractions.Metadata.IShardMetadata!
+Dtde.Abstractions.Metadata.IShardingStrategy.StrategyType.get -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.KeyRange
+Dtde.Abstractions.Metadata.KeyRange.Equals(Dtde.Abstractions.Metadata.KeyRange other) -> bool
+Dtde.Abstractions.Metadata.KeyRange.KeyRange() -> void
+Dtde.Abstractions.Metadata.KeyRange.KeyRange(object? minValue, object? maxValue, System.Type! keyType) -> void
+Dtde.Abstractions.Metadata.KeyRange.KeyType.get -> System.Type!
+Dtde.Abstractions.Metadata.KeyRange.KeyType.init -> void
+Dtde.Abstractions.Metadata.KeyRange.MaxValue.get -> object?
+Dtde.Abstractions.Metadata.KeyRange.MaxValue.init -> void
+Dtde.Abstractions.Metadata.KeyRange.MinValue.get -> object?
+Dtde.Abstractions.Metadata.KeyRange.MinValue.init -> void
+Dtde.Abstractions.Metadata.MetadataValidationResult
+Dtde.Abstractions.Metadata.MetadataValidationResult.Errors.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Dtde.Abstractions.Metadata.MetadataValidationResult.IsValid.get -> bool
+Dtde.Abstractions.Metadata.MetadataValidationResult.Warnings.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Dtde.Abstractions.Metadata.RelationType
+Dtde.Abstractions.Metadata.RelationType.ManyToMany = 2 -> Dtde.Abstractions.Metadata.RelationType
+Dtde.Abstractions.Metadata.RelationType.OneToMany = 1 -> Dtde.Abstractions.Metadata.RelationType
+Dtde.Abstractions.Metadata.RelationType.OneToOne = 0 -> Dtde.Abstractions.Metadata.RelationType
+Dtde.Abstractions.Metadata.ShardStorageMode
+Dtde.Abstractions.Metadata.ShardStorageMode.Databases = 1 -> Dtde.Abstractions.Metadata.ShardStorageMode
+Dtde.Abstractions.Metadata.ShardStorageMode.Manual = 2 -> Dtde.Abstractions.Metadata.ShardStorageMode
+Dtde.Abstractions.Metadata.ShardStorageMode.Tables = 0 -> Dtde.Abstractions.Metadata.ShardStorageMode
+Dtde.Abstractions.Metadata.ShardTier
+Dtde.Abstractions.Metadata.ShardTier.Archive = 3 -> Dtde.Abstractions.Metadata.ShardTier
+Dtde.Abstractions.Metadata.ShardTier.Cold = 2 -> Dtde.Abstractions.Metadata.ShardTier
+Dtde.Abstractions.Metadata.ShardTier.Hot = 0 -> Dtde.Abstractions.Metadata.ShardTier
+Dtde.Abstractions.Metadata.ShardTier.Warm = 1 -> Dtde.Abstractions.Metadata.ShardTier
+Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.ShardingStrategyType.Alphabet = 3 -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.ShardingStrategyType.Composite = 5 -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.ShardingStrategyType.Custom = 6 -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.ShardingStrategyType.DateRange = 1 -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.ShardingStrategyType.Hash = 2 -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.ShardingStrategyType.MaxRows = 4 -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.ShardingStrategyType.PropertyValue = 0 -> Dtde.Abstractions.Metadata.ShardingStrategyType
+Dtde.Abstractions.Metadata.TemporalContainmentRule
+Dtde.Abstractions.Metadata.TemporalContainmentRule.ChildWithinParent = 1 -> Dtde.Abstractions.Metadata.TemporalContainmentRule
+Dtde.Abstractions.Metadata.TemporalContainmentRule.ExactMatch = 2 -> Dtde.Abstractions.Metadata.TemporalContainmentRule
+Dtde.Abstractions.Metadata.TemporalContainmentRule.None = 0 -> Dtde.Abstractions.Metadata.TemporalContainmentRule
+Dtde.Abstractions.Temporal.ITemporalConfiguration
+Dtde.Abstractions.Temporal.ITemporalConfiguration.BuildPredicate<TEntity>(System.DateTime pointInTime) -> System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>!
+Dtde.Abstractions.Temporal.ITemporalConfiguration.IsOpenEnded.get -> bool
+Dtde.Abstractions.Temporal.ITemporalConfiguration.OpenEndedValue.get -> System.DateTime
+Dtde.Abstractions.Temporal.ITemporalConfiguration.ValidFromProperty.get -> Dtde.Abstractions.Metadata.IPropertyMetadata!
+Dtde.Abstractions.Temporal.ITemporalConfiguration.ValidToProperty.get -> Dtde.Abstractions.Metadata.IPropertyMetadata?
+Dtde.Abstractions.Temporal.ITemporalContext
+Dtde.Abstractions.Temporal.ITemporalContext.ClearContext() -> void
+Dtde.Abstractions.Temporal.ITemporalContext.CurrentPoint.get -> System.DateTime?
+Dtde.Abstractions.Temporal.ITemporalContext.EnableHistoryMode() -> void
+Dtde.Abstractions.Temporal.ITemporalContext.IncludeHistory.get -> bool
+Dtde.Abstractions.Temporal.ITemporalContext.SetTemporalContext(System.DateTime temporalPoint) -> void
+Dtde.Abstractions.Transactions.CrossShardIsolationLevel
+Dtde.Abstractions.Transactions.CrossShardIsolationLevel.ReadCommitted = 0 -> Dtde.Abstractions.Transactions.CrossShardIsolationLevel
+Dtde.Abstractions.Transactions.CrossShardIsolationLevel.RepeatableRead = 1 -> Dtde.Abstractions.Transactions.CrossShardIsolationLevel
+Dtde.Abstractions.Transactions.CrossShardIsolationLevel.Serializable = 2 -> Dtde.Abstractions.Transactions.CrossShardIsolationLevel
+Dtde.Abstractions.Transactions.CrossShardIsolationLevel.Snapshot = 3 -> Dtde.Abstractions.Transactions.CrossShardIsolationLevel
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.CrossShardTransactionOptions() -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.EnableRecovery.get -> bool
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.EnableRecovery.set -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.EnableRetry.get -> bool
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.EnableRetry.set -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.IsolationLevel.get -> Dtde.Abstractions.Transactions.CrossShardIsolationLevel
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.IsolationLevel.set -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.MaxRetryAttempts.get -> int
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.MaxRetryAttempts.set -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.MaxRetryDelay.get -> System.TimeSpan
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.MaxRetryDelay.set -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.RetryDelay.get -> System.TimeSpan
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.RetryDelay.set -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.Timeout.get -> System.TimeSpan
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.Timeout.set -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.TransactionName.get -> string?
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.TransactionName.set -> void
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.UseExponentialBackoff.get -> bool
+Dtde.Abstractions.Transactions.CrossShardTransactionOptions.UseExponentialBackoff.set -> void
+Dtde.Abstractions.Transactions.ICrossShardTransaction
+Dtde.Abstractions.Transactions.ICrossShardTransaction.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Abstractions.Transactions.ICrossShardTransaction.CreatedAt.get -> System.DateTime
+Dtde.Abstractions.Transactions.ICrossShardTransaction.EnlistAsync(Dtde.Abstractions.Metadata.IShardMetadata! shard, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Abstractions.Transactions.ICrossShardTransaction.EnlistAsync(string! shardId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Abstractions.Transactions.ICrossShardTransaction.EnlistedShards.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+Dtde.Abstractions.Transactions.ICrossShardTransaction.GetParticipant(string! shardId) -> Dtde.Abstractions.Transactions.ITransactionParticipant?
+Dtde.Abstractions.Transactions.ICrossShardTransaction.IsolationLevel.get -> Dtde.Abstractions.Transactions.CrossShardIsolationLevel
+Dtde.Abstractions.Transactions.ICrossShardTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Abstractions.Transactions.ICrossShardTransaction.State.get -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.ICrossShardTransaction.Timeout.get -> System.TimeSpan
+Dtde.Abstractions.Transactions.ICrossShardTransaction.TransactionId.get -> string!
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.BeginTransactionAsync(Dtde.Abstractions.Transactions.CrossShardTransactionOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Dtde.Abstractions.Transactions.ICrossShardTransaction!>!
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.BeginTransactionAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Dtde.Abstractions.Transactions.ICrossShardTransaction!>!
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.CurrentTransaction.get -> Dtde.Abstractions.Transactions.ICrossShardTransaction?
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.ExecuteInTransactionAsync(System.Func<Dtde.Abstractions.Transactions.ICrossShardTransaction!, System.Threading.Tasks.Task!>! action, Dtde.Abstractions.Transactions.CrossShardTransactionOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.ExecuteInTransactionAsync(System.Func<Dtde.Abstractions.Transactions.ICrossShardTransaction!, System.Threading.Tasks.Task!>! action, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.ExecuteInTransactionAsync<TResult>(System.Func<Dtde.Abstractions.Transactions.ICrossShardTransaction!, System.Threading.Tasks.Task<TResult>!>! action, Dtde.Abstractions.Transactions.CrossShardTransactionOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResult>!
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.ExecuteInTransactionAsync<TResult>(System.Func<Dtde.Abstractions.Transactions.ICrossShardTransaction!, System.Threading.Tasks.Task<TResult>!>! action, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResult>!
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.HasActiveTransaction.get -> bool
+Dtde.Abstractions.Transactions.ICrossShardTransactionCoordinator.RecoverAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Dtde.Abstractions.Transactions.ITransactionParticipant
+Dtde.Abstractions.Transactions.ITransactionParticipant.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Abstractions.Transactions.ITransactionParticipant.HasPendingChanges.get -> bool
+Dtde.Abstractions.Transactions.ITransactionParticipant.PendingOperationCount.get -> int
+Dtde.Abstractions.Transactions.ITransactionParticipant.PrepareAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Dtde.Abstractions.Transactions.ParticipantVote>!
+Dtde.Abstractions.Transactions.ITransactionParticipant.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Abstractions.Transactions.ITransactionParticipant.ShardId.get -> string!
+Dtde.Abstractions.Transactions.ITransactionParticipant.Vote.get -> Dtde.Abstractions.Transactions.ParticipantVote
+Dtde.Abstractions.Transactions.ParticipantVote
+Dtde.Abstractions.Transactions.ParticipantVote.Abort = 2 -> Dtde.Abstractions.Transactions.ParticipantVote
+Dtde.Abstractions.Transactions.ParticipantVote.Pending = 0 -> Dtde.Abstractions.Transactions.ParticipantVote
+Dtde.Abstractions.Transactions.ParticipantVote.Prepared = 1 -> Dtde.Abstractions.Transactions.ParticipantVote
+Dtde.Abstractions.Transactions.ParticipantVote.ReadOnly = 3 -> Dtde.Abstractions.Transactions.ParticipantVote
+Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.Active = 1 -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.Committed = 5 -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.Committing = 4 -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.Failed = 8 -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.None = 0 -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.Prepared = 3 -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.Preparing = 2 -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.RolledBack = 7 -> Dtde.Abstractions.Transactions.TransactionState
+Dtde.Abstractions.Transactions.TransactionState.RollingBack = 6 -> Dtde.Abstractions.Transactions.TransactionState
+override Dtde.Abstractions.Metadata.DateRange.GetHashCode() -> int
+override Dtde.Abstractions.Metadata.KeyRange.GetHashCode() -> int
+static Dtde.Abstractions.Metadata.DateRange.operator !=(Dtde.Abstractions.Metadata.DateRange left, Dtde.Abstractions.Metadata.DateRange right) -> bool
+static Dtde.Abstractions.Metadata.DateRange.operator ==(Dtde.Abstractions.Metadata.DateRange left, Dtde.Abstractions.Metadata.DateRange right) -> bool
+static Dtde.Abstractions.Metadata.KeyRange.operator !=(Dtde.Abstractions.Metadata.KeyRange left, Dtde.Abstractions.Metadata.KeyRange right) -> bool
+static Dtde.Abstractions.Metadata.KeyRange.operator ==(Dtde.Abstractions.Metadata.KeyRange left, Dtde.Abstractions.Metadata.KeyRange right) -> bool
+static Dtde.Abstractions.Metadata.MetadataValidationResult.Failure(System.Collections.Generic.IEnumerable<string!>! errors, System.Collections.Generic.IEnumerable<string!>? warnings = null) -> Dtde.Abstractions.Metadata.MetadataValidationResult!
+static Dtde.Abstractions.Metadata.MetadataValidationResult.Success() -> Dtde.Abstractions.Metadata.MetadataValidationResult!
+static Dtde.Abstractions.Transactions.CrossShardTransactionOptions.Default.get -> Dtde.Abstractions.Transactions.CrossShardTransactionOptions!
+static Dtde.Abstractions.Transactions.CrossShardTransactionOptions.DefaultIsolationLevel.get -> Dtde.Abstractions.Transactions.CrossShardIsolationLevel
+static Dtde.Abstractions.Transactions.CrossShardTransactionOptions.DefaultIsolationLevel.set -> void
+static Dtde.Abstractions.Transactions.CrossShardTransactionOptions.DefaultTimeout.get -> System.TimeSpan
+static Dtde.Abstractions.Transactions.CrossShardTransactionOptions.DefaultTimeout.set -> void
+static Dtde.Abstractions.Transactions.CrossShardTransactionOptions.LongRunning.get -> Dtde.Abstractions.Transactions.CrossShardTransactionOptions!
+static Dtde.Abstractions.Transactions.CrossShardTransactionOptions.ShortLived.get -> Dtde.Abstractions.Transactions.CrossShardTransactionOptions!
+~override Dtde.Abstractions.Metadata.DateRange.Equals(object obj) -> bool
+~override Dtde.Abstractions.Metadata.DateRange.ToString() -> string
+~override Dtde.Abstractions.Metadata.KeyRange.Equals(object obj) -> bool
+~override Dtde.Abstractions.Metadata.KeyRange.ToString() -> string

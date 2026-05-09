@@ -4,6 +4,7 @@ using Dtde.Samples.MultiTenant.Data;
 using Dtde.Samples.MultiTenant.Entities;
 using Dtde.Samples.MultiTenant.Middleware;
 using Dtde.Samples.MultiTenant.Services;
+
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,10 +38,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Add tenant context middleware
+// Add tenant context middleware (extracts tenant id from header / route / query)
 app.UseTenantContext();
 
-app.UseAuthorization();
 app.MapControllers();
 
 // Ensure databases are created
