@@ -214,17 +214,15 @@ public class TestDbContext : DtdeDbContext
     {
         base.OnConfiguring(optionsBuilder);
 
-        optionsBuilder.UseDtde(dtde =>
-        {
-            dtde.ConfigureEntity<Contract>(entity =>
-            {
-                entity.HasTemporalValidity(
-                    validFrom: nameof(Contract.ValidFrom),
-                    validTo: nameof(Contract.ValidTo));
-            });
+        optionsBuilder.UseDtde(dtde => dtde.EnableTestMode());
+    }
 
-            dtde.EnableTestMode();
-        });
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Contract>()
+            .HasTemporalValidity(c => c.ValidFrom, c => c.ValidTo);
     }
 }
 
