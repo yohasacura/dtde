@@ -128,6 +128,24 @@ builder.Services.AddDtdeDbContext<AppDbContext>(
 Each per-shard context now connects to its own database; the table is named
 `Customers` everywhere because there's no name conflict — different DB.
 
+Want **mixed mode** — per-shard tables spread across multiple databases (e.g.
+EU and US tables in one regional DB, APAC tables in another)? Use the
+`AddTableShardInDatabase` helper:
+
+```csharp
+builder.Services.AddDtdeDbContext<AppDbContext>(
+    (db, conn) => db.UseSqlite(conn ?? "Data Source=base.db"),
+    dtde => dtde
+        .AddTableShardInDatabase("EU",   "Data Source=primary.db")
+        .AddTableShardInDatabase("US",   "Data Source=primary.db")
+        .AddTableShardInDatabase("APAC", "Data Source=secondary.db"));
+```
+
+`primary.db` ends up with `Customers_EU` + `Customers_US`; `secondary.db`
+ends up with `Customers_APAC`. Each shard gets its own per-shard table
+(table-mode rewriting still applies), but the tables are spread across the
+databases you choose.
+
 ## 5. Provision the shards (one-time)
 
 For samples, integration tests, or a fresh dev environment, call:

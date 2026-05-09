@@ -154,6 +154,72 @@ public class RealShardingIntegrationTests : IAsyncLifetime
         Assert.Equal(1, usRows);
     }
 
+    [Fact(DisplayName = "Mixed-mode: per-shard tables across multiple databases")]
+    public async Task MixedMode_PerShardTablesAcrossMultipleDatabases()
+    {
+        // Two databases, three shards: EU+US share primary.db (each as its
+        // own table), APAC lives alone in secondary.db (also a per-shard table).
+        var dbId = Guid.NewGuid().ToString("N");
+        var primaryConnString = $"Data Source=primary_{dbId};Mode=Memory;Cache=Shared";
+        var secondaryConnString = $"Data Source=secondary_{dbId};Mode=Memory;Cache=Shared";
+
+        var primaryAnchor = new SqliteConnection(primaryConnString);
+        var secondaryAnchor = new SqliteConnection(secondaryConnString);
+        await primaryAnchor.OpenAsync();
+        await secondaryAnchor.OpenAsync();
+        _connections.Add(primaryAnchor);
+        _connections.Add(secondaryAnchor);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDtdeDbContext<RegionDbContext>(
+            (db, conn) => db.UseSqlite(conn ?? "Data Source=:memory:"),
+            dtde => dtde
+                .AddTableShardInDatabase("EU",   primaryConnString)
+                .AddTableShardInDatabase("US",   primaryConnString)
+                .AddTableShardInDatabase("APAC", secondaryConnString));
+
+        await using var sp = services.BuildServiceProvider();
+        await using var scope = sp.CreateAsyncScope();
+        var ctx = scope.ServiceProvider.GetRequiredService<RegionDbContext>();
+        await ctx.EnsureAllShardsCreatedAsync();
+
+        var primaryTables = await ListTablesAsync(primaryAnchor);
+        var secondaryTables = await ListTablesAsync(secondaryAnchor);
+
+        // primary.db hosts EU and US per-shard tables side by side.
+        Assert.Contains("Customers_EU", primaryTables);
+        Assert.Contains("Customers_US", primaryTables);
+        Assert.DoesNotContain("Customers_APAC", primaryTables);
+
+        // secondary.db hosts the APAC per-shard table.
+        Assert.Contains("Customers_APAC", secondaryTables);
+        Assert.DoesNotContain("Customers_EU", secondaryTables);
+        Assert.DoesNotContain("Customers_US", secondaryTables);
+
+        var contextFactory = scope.ServiceProvider.GetRequiredService<Dtde.EntityFramework.Query.IShardContextFactory>();
+
+        await using (var euCtx = await contextFactory.CreateContextAsync("EU"))
+        {
+            euCtx.Set<Customer>().Add(new Customer { Id = 1, Name = "EU", Region = "EU" });
+            await euCtx.SaveChangesAsync();
+        }
+        await using (var usCtx = await contextFactory.CreateContextAsync("US"))
+        {
+            usCtx.Set<Customer>().Add(new Customer { Id = 2, Name = "US", Region = "US" });
+            await usCtx.SaveChangesAsync();
+        }
+        await using (var apacCtx = await contextFactory.CreateContextAsync("APAC"))
+        {
+            apacCtx.Set<Customer>().Add(new Customer { Id = 3, Name = "APAC", Region = "APAC" });
+            await apacCtx.SaveChangesAsync();
+        }
+
+        Assert.Equal(1, await CountRowsAsync(primaryAnchor, "Customers_EU"));
+        Assert.Equal(1, await CountRowsAsync(primaryAnchor, "Customers_US"));
+        Assert.Equal(1, await CountRowsAsync(secondaryAnchor, "Customers_APAC"));
+    }
+
     private static async Task<List<string>> ListTablesAsync(DbConnection connection)
     {
         await using var cmd = connection.CreateCommand();

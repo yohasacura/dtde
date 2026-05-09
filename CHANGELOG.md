@@ -34,10 +34,23 @@ This release fixes that:
 - **`DtdeDbContext.EnsureAllShardsCreatedAsync()`** provisions every
   shard's tables / databases — analogous to `EnsureCreatedAsync` but
   shard-aware.
+- **Mixed mode** — per-shard tables spread across multiple databases — is
+  supported via `dtde.AddTableShardInDatabase(id, connectionString)`.
+  `primary.db` can host `Customers_EU` + `Customers_US`; `secondary.db` can
+  host `Customers_APAC` and `Customers_LATAM`. The model customizer rewrites
+  the tables, the per-shard factory routes the connection.
+- **`ShardMetadataBuilder.WithConnectionString` is now order-independent.**
+  Earlier it had a side-effect of flipping `_storageMode` to
+  `ShardStorageMode.Databases`, which made the builder's behaviour depend on
+  the order calls were chained in. That side-effect has been removed; storage
+  mode is set explicitly via `WithStorageMode(...)`. The shorthand
+  `dtde.AddShard(id, connStr)` keeps its original db-mode semantics by
+  passing both calls internally.
 
-End-to-end integration tests now verify that table-mode produces real per-shard
-tables (`Customers_EU`, `Customers_US`, etc. on a single SQLite file) and that
-database-mode writes the right rows to the right per-shard databases.
+End-to-end integration tests now verify all three modes route data correctly:
+table-mode produces per-shard tables in a single SQLite file, database-mode
+writes to the right per-shard databases, and mixed-mode produces per-shard
+tables spread across multiple databases.
 
 ### Why
 

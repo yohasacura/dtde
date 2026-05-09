@@ -189,14 +189,23 @@ public sealed class ShardMetadataBuilder
     }
 
     /// <summary>
-    /// Sets the connection string for database sharding.
+    /// Sets the shard's connection string. Storage mode is independent — call
+    /// <see cref="WithStorageMode(ShardStorageMode)"/> separately if you need
+    /// something other than the default <see cref="ShardStorageMode.Tables"/>.
     /// </summary>
     /// <param name="connectionString">The connection string.</param>
     /// <returns>The builder for chaining.</returns>
+    /// <remarks>
+    /// Earlier versions of this method also flipped the storage mode to
+    /// <see cref="ShardStorageMode.Databases"/> as a side-effect, which made
+    /// the builder order-dependent (the dedicated <c>WithStorageMode</c> call
+    /// had to come *after* this one to take effect). That side-effect has
+    /// been removed — call <see cref="WithStorageMode(ShardStorageMode)"/>
+    /// explicitly when you want database-mode.
+    /// </remarks>
     public ShardMetadataBuilder WithConnectionString(string connectionString)
     {
         _connectionString = connectionString;
-        _storageMode = ShardStorageMode.Databases;
         return this;
     }
 

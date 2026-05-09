@@ -142,15 +142,38 @@ public class ShardMetadataTests
     }
 
     [Fact]
-    public void ShardMetadata_DefaultStorageMode_WhenConnectionString_IsDatabases()
+    public void ShardMetadata_WithConnectionString_DoesNotChangeStorageMode()
     {
+        // The default storage mode is Tables, and WithConnectionString
+        // is intentionally side-effect-free so the builder is order-independent.
         var shard = new ShardMetadataBuilder()
             .WithId("DefaultShard")
             .WithName("Default Shard")
             .WithConnectionString("Server=localhost")
             .Build();
 
-        Assert.Equal(ShardStorageMode.Databases, shard.StorageMode);
+        Assert.Equal(ShardStorageMode.Tables, shard.StorageMode);
+        Assert.Equal("Server=localhost", shard.ConnectionString);
+    }
+
+    [Fact]
+    public void ShardMetadata_DatabasesMode_RequiresExplicitWithStorageMode()
+    {
+        // Order-independence: WithStorageMode wins regardless of when it's called.
+        var earlyOrder = new ShardMetadataBuilder()
+            .WithId("Early")
+            .WithStorageMode(ShardStorageMode.Databases)
+            .WithConnectionString("Server=localhost")
+            .Build();
+
+        var lateOrder = new ShardMetadataBuilder()
+            .WithId("Late")
+            .WithConnectionString("Server=localhost")
+            .WithStorageMode(ShardStorageMode.Databases)
+            .Build();
+
+        Assert.Equal(ShardStorageMode.Databases, earlyOrder.StorageMode);
+        Assert.Equal(ShardStorageMode.Databases, lateOrder.StorageMode);
     }
 
     [Fact]

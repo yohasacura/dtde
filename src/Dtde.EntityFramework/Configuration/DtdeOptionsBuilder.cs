@@ -97,7 +97,8 @@ public sealed class DtdeOptionsBuilder
 
     /// <summary>
     /// Adds a database-mode shard for the given shard-key value with its own
-    /// connection string.
+    /// connection string. Each such shard owns an entire database; the entity
+    /// keeps its base table name (e.g. <c>Customers</c>) inside that database.
     /// </summary>
     /// <param name="shardId">The shard identifier; also used as the shard-key value.</param>
     /// <param name="connectionString">The connection string for this shard's database.</param>
@@ -117,6 +118,41 @@ public sealed class DtdeOptionsBuilder
             .WithName(shardId)
             .WithShardKeyValue(shardId)
             .WithConnectionString(connectionString)
+            .WithStorageMode(ShardStorageMode.Databases)
+            .Build());
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a <em>table-mode</em> shard that sits inside a specific database
+    /// (rather than the parent <c>DbContextOptions</c>'s default).
+    /// Use this for the "tables-within-databases" mixed pattern: multiple
+    /// shards land in the same secondary database, each with its own
+    /// per-shard table.
+    /// </summary>
+    /// <param name="shardId">The shard identifier; also used as the shard-key value.</param>
+    /// <param name="connectionString">The connection string of the database that hosts this shard's table.</param>
+    /// <returns>The builder for chaining.</returns>
+    /// <example>
+    /// Two databases, three shards (EU+US in primary, APAC in secondary):
+    /// <code>
+    /// dtde
+    ///     .AddTableShardInDatabase("EU",   "Data Source=primary.db")
+    ///     .AddTableShardInDatabase("US",   "Data Source=primary.db")
+    ///     .AddTableShardInDatabase("APAC", "Data Source=secondary.db");
+    /// </code>
+    /// </example>
+    public DtdeOptionsBuilder AddTableShardInDatabase(string shardId, string connectionString)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(shardId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+
+        _shards.Add(new ShardMetadataBuilder()
+            .WithId(shardId)
+            .WithName(shardId)
+            .WithShardKeyValue(shardId)
+            .WithConnectionString(connectionString)
+            .WithStorageMode(ShardStorageMode.Tables)
             .Build());
         return this;
     }
