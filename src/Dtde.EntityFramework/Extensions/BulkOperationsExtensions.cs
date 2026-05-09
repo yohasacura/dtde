@@ -113,7 +113,19 @@ public static class BulkOperationsExtensions
             return 0;
         }
 
-        // Single-shard fast path: just open one per-shard context and insert.
+        // If a cross-shard transaction is already active in this scope, run
+        // inside it: every shard becomes a participant, and the outer scope
+        // is responsible for committing. This keeps BulkInsertAsync
+        // transactional from the user's point of view.
+        var coordinator = context.GetService<ICrossShardTransactionCoordinator>();
+        if (coordinator?.CurrentTransaction is CrossShardTransaction ambient)
+        {
+            return await InsertViaAmbientTransactionAsync(context, byShardKey, ambient, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // Single-shard fast path: just open one per-shard context, pick a
+        // bulk provider, and insert.
         if (byShardKey.Count == 1)
         {
             var (_, (shard, entityList)) = byShardKey.First();
@@ -123,34 +135,51 @@ public static class BulkOperationsExtensions
 
         // Cross-shard: run inside a cross-shard transaction so all-or-nothing
         // semantics hold across shard boundaries.
-        var coordinator = context.GetService<ICrossShardTransactionCoordinator>()
-            ?? throw new InvalidOperationException(
+        if (coordinator is null)
+        {
+            throw new InvalidOperationException(
                 "Cross-shard bulk insert requires ICrossShardTransactionCoordinator. " +
                 "It is registered automatically by AddDtdeDbContext unless you opted out " +
                 "(enableTransparentSharding: false).");
+        }
 
         var savedCount = 0;
         await coordinator.ExecuteInTransactionAsync(
             async transaction =>
             {
                 var crossShardTx = (CrossShardTransaction)transaction;
-
-                foreach (var (_, (shard, entityList)) in byShardKey)
-                {
-                    var participant = await crossShardTx
-                        .GetOrCreateParticipantAsync(shard, cancellationToken)
-                        .ConfigureAwait(false);
-
-                    foreach (var entity in entityList)
-                    {
-                        participant.Context.Add(entity);
-                    }
-
-                    savedCount += entityList.Count;
-                }
+                savedCount = await InsertViaAmbientTransactionAsync(context, byShardKey, crossShardTx, cancellationToken)
+                    .ConfigureAwait(false);
             },
             CrossShardTransactionOptions.Default,
             cancellationToken).ConfigureAwait(false);
+
+        return savedCount;
+    }
+
+    private static async Task<int> InsertViaAmbientTransactionAsync<TEntity>(
+        DtdeDbContext context,
+        Dictionary<string, (IShardMetadata Shard, List<TEntity> Entities)> byShardKey,
+        CrossShardTransaction transaction,
+        CancellationToken cancellationToken)
+        where TEntity : class
+    {
+        var providers = ResolveProviders(context);
+        var savedCount = 0;
+
+        foreach (var (_, (shard, entityList)) in byShardKey)
+        {
+            var participant = await transaction
+                .GetOrCreateParticipantAsync(shard, cancellationToken)
+                .ConfigureAwait(false);
+
+            // Pick the right bulk path for this shard's provider.
+            savedCount += await RunBulkInsertAsync(
+                providers,
+                participant.Context,
+                entityList,
+                cancellationToken).ConfigureAwait(false);
+        }
 
         return savedCount;
     }
@@ -166,14 +195,135 @@ public static class BulkOperationsExtensions
             ?? throw new InvalidOperationException(
                 "No IShardContextFactory is registered.");
 
+        var providers = ResolveProviders(context);
+
         await using var shardContext = await contextFactory
             .CreateContextAsync(shard, cancellationToken)
             .ConfigureAwait(false);
 
-        var set = shardContext.Set<TEntity>();
-        await set.AddRangeAsync(entities, cancellationToken).ConfigureAwait(false);
-        return await shardContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return await RunBulkInsertAsync(providers, shardContext, entities, cancellationToken)
+            .ConfigureAwait(false);
     }
+
+    private static IReadOnlyList<IBulkInsertProvider> ResolveProviders(DtdeDbContext context)
+    {
+        // Resolve via the single-service wrapper — EF Core's
+        // context.GetService<T> resolves single types reliably, but
+        // IEnumerable<T> resolution doesn't consistently fall through to
+        // the application service provider.
+        var chain = context.GetService<BulkInsertProviderChain>()
+            ?? throw new InvalidOperationException(
+                "No BulkInsertProviderChain is registered. Ensure AddDtdeDbContext " +
+                "registered DTDE services.");
+        return chain.Providers;
+    }
+
+    private static async Task<int> RunBulkInsertAsync<TEntity>(
+        IReadOnlyList<IBulkInsertProvider> providers,
+        DbContext context,
+        IReadOnlyCollection<TEntity> entities,
+        CancellationToken cancellationToken)
+        where TEntity : class
+    {
+        if (entities.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var provider in providers)
+        {
+            if (provider.CanHandle(context))
+            {
+                return await provider
+                    .BulkInsertAsync(context, entities, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        // Defensive fallback — should never hit because the default
+        // provider always claims.
+        var set = context.Set<TEntity>();
+        await set.AddRangeAsync(entities, cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return entities.Count;
+    }
+
+#if NET10_0_OR_GREATER
+    /// <summary>
+    /// Runs <c>ExecuteUpdate</c> on every shard in the entity's shard
+    /// group, returning the sum of rows updated. Set-based; no
+    /// <c>SELECT</c>, no change-tracker overhead. The
+    /// <paramref name="setters"/> action receives EF Core 10's
+    /// <c>UpdateSettersBuilder&lt;TEntity&gt;</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type.</typeparam>
+    /// <param name="context">The parent DTDE-aware DbContext.</param>
+    /// <param name="filter">Filter expression scoping the update.</param>
+    /// <param name="setters">Action that configures the property setters.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The total number of rows updated.</returns>
+    /// <remarks>
+    /// Each shard's update commits independently. For atomic cross-shard
+    /// semantics, wrap the call in a
+    /// <see cref="DtdeDbContextExtensions.BeginCrossShardTransactionAsync(DtdeDbContext, CancellationToken)">cross-shard transaction</see>;
+    /// when an ambient transaction is active, the per-shard executes flow
+    /// through the ambient transaction's participants.
+    /// </remarks>
+    public static Task<int> BulkUpdateAsync<TEntity>(
+        this DtdeDbContext context,
+        Expression<Func<TEntity, bool>> filter,
+        Action<Microsoft.EntityFrameworkCore.Query.UpdateSettersBuilder<TEntity>> setters,
+        CancellationToken cancellationToken = default)
+        where TEntity : class
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(setters);
+
+        return FanOutBulkAsync<TEntity>(
+            context,
+            (set, ct) => set.Where(filter).ExecuteUpdateAsync(setters, ct),
+            cancellationToken);
+    }
+#else
+    /// <summary>
+    /// Runs <c>ExecuteUpdate</c> on every shard in the entity's shard
+    /// group, returning the sum of rows updated. Set-based; no
+    /// <c>SELECT</c>, no change-tracker overhead. The
+    /// <paramref name="setPropertyCalls"/> expression receives EF Core
+    /// 7/8/9's <c>SetPropertyCalls&lt;TEntity&gt;</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type.</typeparam>
+    /// <param name="context">The parent DTDE-aware DbContext.</param>
+    /// <param name="filter">Filter expression scoping the update.</param>
+    /// <param name="setPropertyCalls">Property-update fluent expression
+    /// (<c>p =&gt; p.SetProperty(x =&gt; x.Foo, value)...</c>).</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The total number of rows updated.</returns>
+    /// <remarks>
+    /// Each shard's update commits independently. For atomic cross-shard
+    /// semantics, wrap the call in a
+    /// <see cref="DtdeDbContextExtensions.BeginCrossShardTransactionAsync(DtdeDbContext, CancellationToken)">cross-shard transaction</see>;
+    /// when an ambient transaction is active, the per-shard executes flow
+    /// through the ambient transaction's participants.
+    /// </remarks>
+    public static Task<int> BulkUpdateAsync<TEntity>(
+        this DtdeDbContext context,
+        Expression<Func<TEntity, bool>> filter,
+        Expression<Func<Microsoft.EntityFrameworkCore.Query.SetPropertyCalls<TEntity>, Microsoft.EntityFrameworkCore.Query.SetPropertyCalls<TEntity>>> setPropertyCalls,
+        CancellationToken cancellationToken = default)
+        where TEntity : class
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(setPropertyCalls);
+
+        return FanOutBulkAsync<TEntity>(
+            context,
+            (set, ct) => set.Where(filter).ExecuteUpdateAsync(setPropertyCalls, ct),
+            cancellationToken);
+    }
+#endif
 
     /// <summary>
     /// Runs an <c>ExecuteDelete</c> on each shard in the entity's shard group
@@ -262,6 +412,9 @@ public static class BulkOperationsExtensions
             ?? throw new InvalidOperationException(
                 "No IShardContextFactory is registered.");
 
+        var coordinator = context.GetService<ICrossShardTransactionCoordinator>();
+        var ambient = coordinator?.CurrentTransaction as CrossShardTransaction;
+
         // Run sequentially: parallel ExecuteUpdate/Delete across shards is
         // possible but each opens its own connection, and the per-provider
         // contention story varies. Sequential is correct + boring; parallel
@@ -269,12 +422,37 @@ public static class BulkOperationsExtensions
         var total = 0;
         foreach (var shard in shards)
         {
-            await using var shardContext = await contextFactory
-                .CreateContextAsync(shard, cancellationToken)
-                .ConfigureAwait(false);
+            DbContext shardContext;
+            bool ownsContext;
 
-            var set = shardContext.Set<TEntity>();
-            total += await operation(set, cancellationToken).ConfigureAwait(false);
+            if (ambient is not null)
+            {
+                // Inside an ambient cross-shard transaction: route through
+                // the participant so the bulk operation is part of the
+                // transaction.
+                var participant = await ambient.GetOrCreateParticipantAsync(shard, cancellationToken)
+                    .ConfigureAwait(false);
+                shardContext = participant.Context;
+                ownsContext = false;
+            }
+            else
+            {
+                shardContext = await contextFactory.CreateContextAsync(shard, cancellationToken).ConfigureAwait(false);
+                ownsContext = true;
+            }
+
+            try
+            {
+                var set = shardContext.Set<TEntity>();
+                total += await operation(set, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (ownsContext)
+                {
+                    await shardContext.DisposeAsync().ConfigureAwait(false);
+                }
+            }
         }
 
         return total;

@@ -29,4 +29,25 @@ public interface IShardedQueryExecutor
         IQueryable<TEntity> query,
         Func<IEnumerable<TResult>, TResult> aggregator,
         CancellationToken cancellationToken = default) where TEntity : class;
+
+    /// <summary>
+    /// Streams a query's results across shards as an
+    /// <see cref="IAsyncEnumerable{T}"/>. Each shard's result set is pulled
+    /// concurrently into a bounded buffer; consumers see entities in arrival
+    /// order (across shards) so the call uses constant memory regardless of
+    /// the result-set size.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type.</typeparam>
+    /// <param name="query">The query to execute.</param>
+    /// <param name="bufferSize">
+    /// Maximum number of entities buffered in flight before producers wait.
+    /// Defaults to <c>shardCount * 64</c>; minimum 16.
+    /// </param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>An async stream of entities. Order is not guaranteed —
+    /// apply <c>OrderBy</c> on the result if you need it.</returns>
+    public IAsyncEnumerable<TEntity> ExecuteStreamingAsync<TEntity>(
+        IQueryable<TEntity> query,
+        int? bufferSize = null,
+        CancellationToken cancellationToken = default) where TEntity : class;
 }

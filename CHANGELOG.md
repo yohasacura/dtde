@@ -13,6 +13,64 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 > The migration is straightforward (5-10 lines per project); see "Migrating
 > from 1.0.0" below. The next published version number is to be decided.
 
+### Bulk + query depth
+
+Three more capabilities completing the read/write story.
+
+**1. Streaming fan-out queries.**
+`IShardedQueryExecutor.ExecuteStreamingAsync<TEntity>` returns
+`IAsyncEnumerable<TEntity>`. Per-shard streams are concurrent producers
+into a bounded `Channel<TEntity>`; the consumer pulls in arrival order
+with constant memory regardless of total result-set size. The default
+buffer is `shardCount × 64`; tweak via the `bufferSize` parameter.
+
+**2. Pluggable bulk-insert providers.**
+New `IBulkInsertProvider` abstraction. The shipped
+`DefaultBulkInsertProvider` does the standard `AddRangeAsync` +
+`SaveChangesAsync` path; provider-specific implementations (SQL Server
+`SqlBulkCopy`, PostgreSQL `COPY`, Oracle direct-path) plug in via DI:
+
+```csharp
+services.AddSingleton<IBulkInsertProvider, MySqlServerBulkInsertProvider>();
+services.AddDtdeDbContext<AppDbContext>(...);
+```
+
+The `BulkInsertProviderChain` resolves them in registration order with
+the default at the tail; the first provider whose `CanHandle(context)`
+returns `true` for a given per-shard `DbContext` wins. Used by
+`BulkInsertAsync` for every shard touched.
+
+**3. `BulkUpdateAsync` across shards.** Multi-EF surface:
+- `net8.0` / `net9.0` — `Expression<Func<SetPropertyCalls<T>, SetPropertyCalls<T>>>` (the EF Core 7+ shape).
+- `net10.0` — `Action<UpdateSettersBuilder<T>>` (the EF Core 10 shape).
+
+Selected at compile time via `#if NET10_0_OR_GREATER`. Fans the update
+out across every shard in the entity's group; auto-routes through an
+ambient cross-shard transaction when one is active.
+
+**Bulk operations now flow through ambient transactions.**
+`BulkInsertAsync`, `BulkUpdateAsync`, `BulkDeleteAsync` detect
+`ICrossShardTransactionCoordinator.CurrentTransaction` and route every
+per-shard call through that transaction's participants — making
+bulk-then-rollback semantics work as expected. Outside a transaction,
+the existing single-shard fast path / 2PC behaviour is preserved.
+
+**Bonus correctness fixes (uncovered by the bulk + transaction
+interaction):**
+
+- `CommitAllParticipantsAsync` now commits *every* prepared and
+  read-only participant. The previous code skipped read-only
+  participants, but a read-only participant in a cross-shard
+  transaction may still hold an open local transaction with work that
+  was committed via earlier `SaveChangesAsync` calls (typical of bulk
+  paths). Skipping their commit silently rolled the work back.
+- `CrossShardTransaction` now implements idempotent `DisposeAsync` and
+  exposes an `IsDisposed` flag. The coordinator's
+  `CurrentTransaction` checks `IsDisposed` so a stale ambient
+  transaction left in a caller's `AsyncLocal` slot — from a
+  previously-disposed `await using` scope — no longer trips nested-tx
+  detection on subsequent `BeginTransactionAsync` calls.
+
 ### Transactions: depth + production-grade recovery
 
 Three big additions completing the cross-shard transaction story.

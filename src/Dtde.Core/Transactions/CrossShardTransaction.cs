@@ -49,12 +49,23 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
     private readonly IShardRegistry _shardRegistry;
     private readonly ShardParticipantFactory _participantFactory;
     private readonly ITransactionLog? _transactionLog;
+    private readonly Action? _onDisposed;
     private readonly ILogger<CrossShardTransaction> _logger;
     private readonly ConcurrentDictionary<string, ShardTransactionParticipant> _participants = new();
     private readonly CancellationTokenSource _timeoutCts;
     private readonly object _stateLock = new();
     private readonly IsolationLevel _participantIsolationLevel;
     private TransactionState _state = TransactionState.Active;
+    private int _disposed; // 0 = not disposed; 1 = disposed (volatile via Interlocked).
+
+    /// <summary>
+    /// Whether this transaction has been disposed. The coordinator checks
+    /// this when surfacing <c>CurrentTransaction</c> so a stale ambient
+    /// transaction in a caller's <see cref="System.Threading.AsyncLocal{T}"/>
+    /// — set during a previous, now-disposed scope — doesn't poison
+    /// subsequent <c>BeginTransactionAsync</c> calls.
+    /// </summary>
+    public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CrossShardTransaction"/> class.
@@ -93,6 +104,23 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
         ShardParticipantFactory participantFactory,
         ITransactionLog? transactionLog,
         ILogger<CrossShardTransaction> logger)
+        : this(transactionId, options, shardRegistry, participantFactory, transactionLog, onDisposed: null, logger)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance with a dispose callback. The coordinator
+    /// uses this overload to clear its <c>CurrentTransaction</c> when this
+    /// transaction is disposed.
+    /// </summary>
+    internal CrossShardTransaction(
+        string transactionId,
+        CrossShardTransactionOptions options,
+        IShardRegistry shardRegistry,
+        ShardParticipantFactory participantFactory,
+        ITransactionLog? transactionLog,
+        Action? onDisposed,
+        ILogger<CrossShardTransaction> logger)
     {
         TransactionId = transactionId ?? throw new ArgumentNullException(nameof(transactionId));
         IsolationLevel = options?.IsolationLevel ?? CrossShardIsolationLevel.ReadCommitted;
@@ -100,6 +128,7 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
         _shardRegistry = shardRegistry ?? throw new ArgumentNullException(nameof(shardRegistry));
         _participantFactory = participantFactory ?? throw new ArgumentNullException(nameof(participantFactory));
         _transactionLog = transactionLog;
+        _onDisposed = onDisposed;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _participantIsolationLevel = MapIsolationLevel(IsolationLevel);
         CreatedAt = DateTime.UtcNow;
@@ -304,6 +333,11 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         // Attempt rollback if not committed
         if (State is TransactionState.Active or TransactionState.Preparing or TransactionState.Prepared)
         {
@@ -327,6 +361,13 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
 
         _participants.Clear();
         _timeoutCts.Dispose();
+
+        // Run the coordinator's "I'm gone" callback so the next
+        // BeginTransactionAsync in this scope sees no ambient transaction.
+        // The callback runs synchronously here (no awaits between disposal
+        // and the callback), so the AsyncLocal mutation flows back to the
+        // caller's frame correctly.
+        _onDisposed?.Invoke();
     }
 
     private async Task EnlistInternalAsync(string shardId, CancellationToken cancellationToken)
@@ -436,8 +477,13 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
         var failedShards = new List<string>();
         Exception? firstError = null;
 
-        // Commit each participant - this is the critical section
-        foreach (var participant in _participants.Values.Where(p => p.Vote == ParticipantVote.Prepared))
+        // Commit every prepared OR read-only participant. Read-only
+        // participants still hold an open local transaction (work may have
+        // been written via SaveChangesAsync earlier in the scope, e.g. via
+        // bulk operations) and need to commit to persist that work and
+        // release locks.
+        foreach (var participant in _participants.Values
+            .Where(p => p.Vote is ParticipantVote.Prepared or ParticipantVote.ReadOnly))
         {
             try
             {

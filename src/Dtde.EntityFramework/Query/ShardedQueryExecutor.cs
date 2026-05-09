@@ -1,4 +1,6 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 
 using Dtde.Abstractions.Metadata;
 using Dtde.Abstractions.Temporal;
@@ -284,6 +286,110 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
             if (freshContext is not null)
             {
                 await freshContext.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<TEntity> ExecuteStreamingAsync<TEntity>(
+        IQueryable<TEntity> query,
+        int? bufferSize = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default) where TEntity : class
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var entityType = typeof(TEntity);
+        var shardsList = DetermineTargetShards(entityType, query.Expression).ToList();
+
+        if (shardsList.Count == 0)
+        {
+            LogMessages.NoShardsFound(_logger, entityType.Name);
+            yield break;
+        }
+
+        // Bounded channel: producers (per-shard streams) push into it,
+        // consumer pulls in arrival order. The bound is per-channel — once
+        // it's full, producers wait, so memory stays roughly proportional
+        // to the bound × entity size, regardless of total result-set size.
+        var capacity = Math.Max(16, bufferSize ?? shardsList.Count * 64);
+        var channel = Channel.CreateBounded<TEntity>(new BoundedChannelOptions(capacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleWriter = false,
+            SingleReader = true,
+        });
+
+        using var producerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var producerToken = producerCts.Token;
+
+        // Fan out producers — one Task per shard pumping its IAsyncEnumerable
+        // into the channel.
+        var producerTasks = shardsList
+            .Select(shard => Task.Run(() => StreamShardAsync(query, shard, channel.Writer, producerToken), producerToken))
+            .ToArray();
+
+        // When all shards finish, complete the channel so the consumer loop
+        // terminates. Errors from producers complete the channel with the
+        // first exception, which propagates out of the consumer below.
+        var completionTask = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.WhenAll(producerTasks).ConfigureAwait(false);
+                channel.Writer.Complete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.Complete(ex);
+            }
+        }, producerToken);
+
+        try
+        {
+            await foreach (var entity in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            {
+                yield return entity;
+            }
+        }
+        finally
+        {
+            // Tear down producers if the consumer abandoned the stream.
+            producerCts.Cancel();
+            try
+            {
+                await completionTask.ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Producers may throw on cancellation; we already yielded to the caller.
+            catch
+#pragma warning restore CA1031
+            {
+                // Swallowed — caller's cancellation already propagated.
+            }
+        }
+    }
+
+    private async Task StreamShardAsync<TEntity>(
+        IQueryable<TEntity> originalQuery,
+        IShardMetadata shard,
+        ChannelWriter<TEntity> writer,
+        CancellationToken cancellationToken) where TEntity : class
+    {
+        var lease = await GetContextForShardAsync(shard, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var shardQuery = BuildShardQuery<TEntity>(lease.Context, shard);
+            var finalQuery = ApplyExpressionToSource(originalQuery.Expression, shardQuery);
+
+            await foreach (var entity in finalQuery.AsAsyncEnumerable().WithCancellation(cancellationToken).ConfigureAwait(false))
+            {
+                await writer.WriteAsync(entity, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            if (lease.OwnsContext)
+            {
+                await lease.Context.DisposeAsync().ConfigureAwait(false);
             }
         }
     }

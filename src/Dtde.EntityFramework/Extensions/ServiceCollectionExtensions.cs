@@ -156,6 +156,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<VersionManager>();
         services.AddScoped<ShardWriteRouter>();
 
+        // Default bulk-insert provider is always registered last so it acts
+        // as the fallback. Provider-specific implementations (SqlBulkCopy,
+        // PG COPY, etc.) plug in via additional IBulkInsertProvider
+        // registrations BEFORE AddDtdeDbContext is called. The
+        // BulkInsertProviderChain wraps the IEnumerable<T> as a single
+        // service because EF Core's context.GetService<T>() resolves single
+        // services and IEnumerable<T> resolution through the EF internal
+        // SP isn't reliable.
+        services.AddSingleton<IBulkInsertProvider, DefaultBulkInsertProvider>();
+        services.AddSingleton<BulkInsertProviderChain>();
+
         return services;
     }
 
