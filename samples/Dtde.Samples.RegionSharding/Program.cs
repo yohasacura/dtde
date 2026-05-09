@@ -23,19 +23,10 @@ builder.Services.AddOpenApi();
 // ============================================================================
 
 builder.Services.AddDtdeDbContext<RegionShardingDbContext>(
-    // Configure EF Core DbContext
-    dbOptions =>
-    {
-        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-            ?? "Data Source=region_sharding.db";
-        dbOptions.UseSqlite(connectionString);
-    },
-    // Configure DTDE sharding options
-    dtdeOptions =>
-    {
-        // Sharding is configured in DbContext.OnModelCreating using fluent API
-        // No additional builder configuration needed for basic scenarios
-    });
+    db => db.UseSqlite(
+        builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? "Data Source=region_sharding.db"),
+    dtde => dtde.AddShards("EU", "US", "APAC"));
 
 var app = builder.Build();
 

@@ -1,4 +1,5 @@
 using Dtde.EntityFramework;
+using Dtde.EntityFramework.Extensions;
 using Dtde.Sample.WebApi.Entities;
 
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,9 @@ public class SampleDbContext : DtdeDbContext
 
             entity.HasIndex(e => e.ContractNumber);
             entity.HasIndex(e => e.ValidFrom);
+
+            // DTDE: bi-temporal versioning by ValidFrom / ValidTo.
+            entity.HasTemporalValidity(c => c.ValidFrom, c => c.ValidTo);
         });
 
         modelBuilder.Entity<ContractLineItem>(entity =>
@@ -58,6 +62,9 @@ public class SampleDbContext : DtdeDbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.ContractId);
+
+            // DTDE: bi-temporal versioning by ValidFrom / ValidTo.
+            entity.HasTemporalValidity(li => li.ValidFrom, li => li.ValidTo);
         });
 
         // Regular entities - standard EF Core configuration (no temporal)
