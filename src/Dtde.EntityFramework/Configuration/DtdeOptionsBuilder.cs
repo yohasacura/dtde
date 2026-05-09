@@ -284,7 +284,8 @@ public sealed class DtdeOptionsBuilder
             DefaultTemporalContextProvider = _defaultTemporalContextProvider,
             MaxParallelShards = _maxParallelShards,
             EnableDiagnostics = _enableDiagnostics,
-            EnableTestMode = _enableTestMode
+            EnableTestMode = _enableTestMode,
+            ShardRegistry = new Dtde.Core.Metadata.ShardRegistry(_shards),
         };
 
         options.AddShards(_shards);

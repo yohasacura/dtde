@@ -15,69 +15,83 @@ using Microsoft.Extensions.Logging;
 namespace Dtde.EntityFramework.Extensions;
 
 /// <summary>
-/// Single canonical DI entry point for DTDE:
-/// <see cref="AddDtdeDbContext{TContext}(IServiceCollection, Action{DbContextOptionsBuilder}, Action{DtdeOptionsBuilder})"/>.
+/// DI entry point for DTDE: <see cref="AddDtdeDbContext{TContext}(IServiceCollection, Action{DbContextOptionsBuilder, string}, Action{DtdeOptionsBuilder})"/>.
 /// </summary>
-/// <remarks>
-/// Application code should use that one-call helper for nearly all setups. The lower-level helpers (<c>AddDtde</c>,
-/// <c>UseTransparentSharding</c>, etc.) are internal implementation details.
-/// </remarks>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers a DTDE-aware <see cref="DbContext"/> with the DI container.
-    /// Cross-shard transparency (automatic 2PC across shards in
-    /// <c>SaveChangesAsync</c>) is enabled by default.
+    /// Registers a DTDE-aware <see cref="DbContext"/> with the DI container,
+    /// wires up cross-shard transparency (automatic 2PC across shards in
+    /// <c>SaveChangesAsync</c>), and installs a per-shard context factory
+    /// that creates real per-shard <see cref="DbContext"/> instances on demand
+    /// — with shard-specific table names (table-mode) or shard-specific
+    /// connection strings (database-mode), depending on how each shard was
+    /// declared.
     /// </summary>
-    /// <typeparam name="TContext">The application's <see cref="DtdeDbContext"/> subclass.</typeparam>
+    /// <typeparam name="TContext">The application's <see cref="DtdeDbContext"/> subclass. Must declare a public constructor taking a single <see cref="DbContextOptions{TContext}"/>.</typeparam>
     /// <param name="services">The DI container.</param>
-    /// <param name="configureDbContext">Configures the underlying EF Core options (e.g. <c>UseSqlite</c>, <c>UseSqlServer</c>).</param>
+    /// <param name="configureProvider">
+    /// Configures the underlying EF Core provider for both the parent context
+    /// and each per-shard context. The framework invokes this with each
+    /// shard's connection string (or <see langword="null"/> for the parent
+    /// context and for table-mode shards that inherit the default connection).
+    /// Typical body: <c>(db, conn) =&gt; db.UseSqlite(conn ?? "Data Source=app.db")</c>.
+    /// </param>
     /// <param name="configureDtde">Configures DTDE: shards, defaults, diagnostics.</param>
     /// <returns>The same <see cref="IServiceCollection"/> for chaining.</returns>
     /// <example>
     /// <code>
+    /// // Table-mode (single SQLite file, per-shard tables Customers_EU, Customers_US, ...):
     /// builder.Services.AddDtdeDbContext&lt;AppDbContext&gt;(
-    ///     db => db.UseSqlite("Data Source=app.db"),
-    ///     dtde => dtde.AddShards("EU", "US", "APAC"));
+    ///     (db, conn) =&gt; db.UseSqlite(conn ?? "Data Source=app.db"),
+    ///     dtde =&gt; dtde.AddShards("EU", "US", "APAC"));
+    ///
+    /// // Database-mode (one DB per shard):
+    /// builder.Services.AddDtdeDbContext&lt;AppDbContext&gt;(
+    ///     (db, conn) =&gt; db.UseSqlite(conn ?? "Data Source=base.db"),
+    ///     dtde =&gt; dtde
+    ///         .AddShard("EU", "Data Source=eu.db")
+    ///         .AddShard("US", "Data Source=us.db"));
     /// </code>
     /// </example>
     public static IServiceCollection AddDtdeDbContext<TContext>(
         this IServiceCollection services,
-        Action<DbContextOptionsBuilder> configureDbContext,
+        Action<DbContextOptionsBuilder, string?> configureProvider,
         Action<DtdeOptionsBuilder> configureDtde)
         where TContext : DtdeDbContext
-        => services.AddDtdeDbContext<TContext>(
-            configureDbContext,
-            configureDtde,
-            enableTransparentSharding: true);
+        => services.AddDtdeDbContext<TContext>(configureProvider, configureDtde, enableTransparentSharding: true);
 
     /// <summary>
-    /// Registers a DTDE-aware <see cref="DbContext"/> with the option to
-    /// disable transparent cross-shard transaction handling. Use the simpler
-    /// overload unless you specifically need to opt out of 2PC interception.
+    /// As <see cref="AddDtdeDbContext{TContext}(IServiceCollection, Action{DbContextOptionsBuilder, string}, Action{DtdeOptionsBuilder})"/>
+    /// but lets you opt out of automatic cross-shard transaction interception.
     /// </summary>
-    /// <typeparam name="TContext">The application's <see cref="DtdeDbContext"/> subclass.</typeparam>
-    /// <param name="services">The DI container.</param>
-    /// <param name="configureDbContext">Configures the underlying EF Core options.</param>
-    /// <param name="configureDtde">Configures DTDE.</param>
-    /// <param name="enableTransparentSharding">
-    /// When <see langword="true"/> (recommended), <see cref="DbContext.SaveChangesAsync(System.Threading.CancellationToken)"/>
-    /// transparently fans out and coordinates writes that span multiple shards.
-    /// </param>
-    /// <returns>The same <see cref="IServiceCollection"/> for chaining.</returns>
     public static IServiceCollection AddDtdeDbContext<TContext>(
         this IServiceCollection services,
-        Action<DbContextOptionsBuilder> configureDbContext,
+        Action<DbContextOptionsBuilder, string?> configureProvider,
         Action<DtdeOptionsBuilder> configureDtde,
         bool enableTransparentSharding)
         where TContext : DtdeDbContext
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configureDbContext);
+        ArgumentNullException.ThrowIfNull(configureProvider);
         ArgumentNullException.ThrowIfNull(configureDtde);
 
         services.AddDtdeCore(configureDtde);
-        services.AddScoped<IShardContextFactory, NullShardContextFactory<TContext>>();
+
+        // Per-shard factory replaces the no-op default. It calls back into the
+        // user's configureProvider with the shard's connection string, so each
+        // per-shard DbContext has the right provider and the right connection.
+        services.AddScoped<IShardContextFactory>(sp =>
+        {
+            var shardRegistry = sp.GetRequiredService<IShardRegistry>();
+            var dtdeOptions = sp.GetRequiredService<DtdeOptions>();
+            var logger = sp.GetRequiredService<ILogger<PerShardContextFactory<TContext>>>();
+            return new PerShardContextFactory<TContext>(
+                shardRegistry,
+                configureProvider,
+                dtdeOptions,
+                logger);
+        });
 
         if (enableTransparentSharding)
         {
@@ -86,7 +100,10 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<TContext>((sp, options) =>
         {
-            configureDbContext(options);
+            // Parent context: framework calls configureProvider with null
+            // (no specific shard connection); user typically falls back to a
+            // configured default ("Data Source=app.db" or similar).
+            configureProvider(options, null);
 
             var dtdeOptions = sp.GetRequiredService<DtdeOptions>();
             options.UseDtdeOptions(dtdeOptions);
@@ -101,14 +118,9 @@ public static class ServiceCollectionExtensions
     }
 
     // ------------------------------------------------------------------
-    //  Internal infrastructure (composable via UseDtde extension)
+    //  Internal infrastructure
     // ------------------------------------------------------------------
 
-    /// <summary>
-    /// Registers DTDE's core services (registries, query/update services). Public so the
-    /// <c>UseDtde(Action&lt;DtdeOptionsBuilder&gt;)</c> extension can call into it; not
-    /// intended for application code.
-    /// </summary>
     internal static IServiceCollection AddDtdeCore(
         this IServiceCollection services,
         Action<DtdeOptionsBuilder> configureOptions)

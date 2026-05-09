@@ -11,10 +11,15 @@ namespace Dtde.EntityFramework.Extensions;
 /// directly into an <c>AddDbContext</c> call.
 /// </summary>
 /// <remarks>
-/// Most applications should use <see cref="ServiceCollectionExtensions.AddDtdeDbContext{TContext}(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action{DbContextOptionsBuilder}, System.Action{DtdeOptionsBuilder})"/>
-/// — the one-call canonical entry. <see cref="UseDtde{TContext}(DbContextOptionsBuilder{TContext}, System.Action{DtdeOptionsBuilder})"/>
-/// is provided for setups that compose <c>AddDbContext</c> manually and don't
-/// need the transparent cross-shard transaction interceptor.
+/// Most applications should use <c>AddDtdeDbContext&lt;TContext&gt;</c> from
+/// <see cref="ServiceCollectionExtensions"/> — the one-call canonical entry
+/// that wires the per-shard context factory and transparent cross-shard
+/// transactions automatically.
+/// <see cref="UseDtde{TContext}(DbContextOptionsBuilder{TContext}, System.Action{DtdeOptionsBuilder})"/>
+/// is provided for setups that compose <c>AddDbContext</c> manually; note
+/// that this path does NOT install the per-shard context factory, so reads
+/// and writes will all go through the parent context's connection — useful
+/// for non-sharded queries against a DTDE-aware DbContext or for testing.
 /// </remarks>
 public static class DbContextOptionsBuilderExtensions
 {
