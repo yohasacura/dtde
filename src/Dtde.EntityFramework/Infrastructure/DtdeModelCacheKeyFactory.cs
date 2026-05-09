@@ -12,11 +12,12 @@ namespace Dtde.EntityFramework.Infrastructure;
 /// the right table mappings.
 /// </summary>
 /// <remarks>
-/// Two shards with the same id may produce different models if they have
-/// different storage modes — table-mode rewrites <c>Customers</c> →
-/// <c>Customers_EU</c> while database-mode keeps the original table name.
-/// The cache key therefore includes both the active shard id and the shard's
-/// storage mode.
+/// The cache key includes the active shard's group, local id, and storage
+/// mode. Two shards with the same local id in different groups (for example,
+/// shard <c>"0"</c> in group <c>hash8</c> versus shard <c>"0"</c> in group
+/// <c>hash3</c>) produce different per-shard models — they map different
+/// entities to their per-shard tables — and so they must cache to distinct
+/// keys.
 /// </remarks>
 internal sealed class DtdeModelCacheKeyFactory : IModelCacheKeyFactory
 {
@@ -27,12 +28,14 @@ internal sealed class DtdeModelCacheKeyFactory : IModelCacheKeyFactory
         var extension = context.GetService<IDbContextOptions>()
             .FindExtension<DtdeOptionsExtension>();
 
-        var shardId = extension?.ActiveShardId;
-        var storageMode = shardId is null
-            ? (ShardStorageMode?)null
-            : extension!.Options.ShardRegistry.GetShard(shardId)?.StorageMode;
+        var shard = extension?.ActiveShard;
 
-        return new DtdeModelCacheKey(context.GetType(), shardId, storageMode, designTime);
+        return new DtdeModelCacheKey(
+            context.GetType(),
+            shard?.GroupName,
+            shard?.ShardId,
+            shard?.StorageMode,
+            designTime);
     }
 }
 
@@ -41,6 +44,7 @@ internal sealed class DtdeModelCacheKeyFactory : IModelCacheKeyFactory
 /// </summary>
 internal readonly record struct DtdeModelCacheKey(
     Type ContextType,
+    string? ActiveShardGroup,
     string? ActiveShardId,
     ShardStorageMode? StorageMode,
     bool DesignTime);

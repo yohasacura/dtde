@@ -79,12 +79,13 @@ internal sealed class PerShardContextFactory<TContext> : IShardContextFactory
         _configureProvider(optionsBuilder, connectionString);
 
         // Layer the shard-tagged DTDE extension on top so the model customizer
-        // and cache key factory rewrite tables for this shard.
+        // and cache key factory rewrite tables for this shard and exclude
+        // entities bound to other groups.
         var existing = optionsBuilder.Options.FindExtension<DtdeOptionsExtension>()
             ?? new DtdeOptionsExtension().WithOptions(_dtdeOptions);
         var taggedExtension = existing
             .WithOptions(_dtdeOptions)
-            .WithActiveShardId(shard.ShardId);
+            .WithActiveShard(shard);
 
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(taggedExtension);
 

@@ -13,6 +13,58 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 > The migration is straightforward (5-10 lines per project); see "Migrating
 > from 1.0.0" below. The next published version number is to be decided.
 
+### Per-entity shard groups
+
+Different entities can now have different shard topologies inside the same
+DbContext — eight hash buckets for users *and* three yearly buckets for
+orders. Each entity binds to a named **shard group**; shard ids are unique
+*within* a group, so `"0"` in a `hash8` group is a different physical shard
+from `"0"` in a `hash3` group.
+
+```csharp
+// Program.cs
+dtde => dtde
+    .AddShardGroup("hash8", g => g.AddShards("0","1","2","3","4","5","6","7"))
+    .AddShardGroup("years", g => g.AddShards("2023","2024","2025"));
+
+// OnModelCreating
+modelBuilder.Entity<UserProfile>().ShardByHash(u => u.UserId, 8).UseShardGroup("hash8");
+modelBuilder.Entity<Order>().ShardByDate(o => o.OrderDate, DateShardInterval.Year).UseShardGroup("years");
+```
+
+The simple "all entities share one topology" case stays unchanged —
+`dtde.AddShards("EU","US","APAC")` populates the implicit default group, and
+entities that don't call `UseShardGroup` bind to it.
+
+New types:
+- **`IShardGroup`** + **`IShardGroupRegistry`** — the public abstractions.
+- **`ShardGroup`** + **`ShardGroupRegistry`** — default implementations.
+- **`GroupScopedShardRegistry`** — an `IShardRegistry` view over a single
+  group, used by routing strategies and the write router so writes never
+  escape the entity's declared group.
+- **`IShardMetadata.GroupName`** — every shard now carries its group name
+  (defaults to the conventional `"__default__"`).
+- **`IShardingConfiguration.ShardGroupName`** — every entity sharding config
+  carries the bound group name.
+- **`ShardingBuilder<T>.UseShardGroup(name)`** — fluent entity-side API.
+- **`DtdeOptionsBuilder.AddShardGroup(name, configure)`** — fluent
+  application-side API.
+- **`ShardIdentityExtensions.ToQualifiedId()`** — converts a shard's
+  `(GroupName, ShardId)` to a `"groupName::shardId"` string used as a
+  globally unique identifier in cross-shard transaction bookkeeping.
+
+The model customizer now also **excludes out-of-group entities** from
+per-shard models, so `EnsureAllShardsCreatedAsync` only provisions tables
+that actually belong on each shard. Two entities with overlapping local
+shard ids (e.g. `"0"` in `hash8` vs `"0"` in `hash3`) no longer collide
+during provisioning, routing, or fan-out.
+
+**Startup validation:** if an entity declares `UseShardGroup("foo")` but
+the application never registered a `foo` group, an `InvalidOperationException`
+naming both the entity and the missing group is thrown the first time the
+DbContext's model is built. Misspelt group names surface immediately
+instead of as obscure DbSet errors at query time.
+
 ### Real per-shard execution (was metadata-only in v1.0)
 
 In v1.0, DTDE made shard-routing *decisions* but the execution layer always

@@ -33,6 +33,9 @@ public sealed class ShardingConfiguration : IShardingConfiguration
     /// <inheritdoc />
     public DateShardInterval? DateInterval { get; init; }
 
+    /// <inheritdoc />
+    public string ShardGroupName { get; init; } = IShardGroupRegistry.DefaultGroupName;
+
     /// <summary>
     /// Creates a sharding configuration with the specified settings.
     /// </summary>

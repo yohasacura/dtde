@@ -187,9 +187,10 @@ public sealed class ShardAwareSaveChangesInterceptor : SaveChangesInterceptor
 
             hasShardedEntities = true;
 
-            // Determine the target shard for this entity
+            // Determine the target shard for this entity. Fully-qualified id
+            // disambiguates same-local-id shards in different groups.
             var targetShard = DetermineTargetShardForEntry(entry, writeRouter);
-            AddToShardGroup(shardGroups, targetShard.ShardId, entry);
+            AddToShardGroup(shardGroups, targetShard.ToQualifiedId(), entry);
         }
 
         // If we have more than one shard group (excluding default) or mixed sharded/non-sharded,
@@ -371,7 +372,7 @@ public sealed class ShardAwareSaveChangesInterceptor : SaveChangesInterceptor
     {
         var shardRegistry = _serviceProvider.GetService<IShardRegistry>();
         return shardRegistry?.GetAllShards()
-            .FirstOrDefault(s => s.Tier == ShardTier.Hot)?.ShardId;
+            .FirstOrDefault(s => s.Tier == ShardTier.Hot)?.ToQualifiedId();
     }
 
     private sealed class ShardAnalysisResult

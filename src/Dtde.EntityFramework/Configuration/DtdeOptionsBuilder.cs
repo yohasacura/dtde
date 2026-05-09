@@ -212,6 +212,41 @@ public sealed class DtdeOptionsBuilder
     }
 
     /// <summary>
+    /// Adds a named <see cref="IShardGroup"/>. Use this when different
+    /// entities in the same DbContext need different shard topologies — for
+    /// example, eight hash buckets for users and three yearly buckets for
+    /// orders. Entities pick which group they live on via
+    /// <c>ShardingBuilder&lt;T&gt;.UseShardGroup(name)</c>.
+    /// </summary>
+    /// <param name="groupName">The group's name; entities reference it via <c>UseShardGroup</c>.</param>
+    /// <param name="configure">Callback that registers the group's shards.</param>
+    /// <returns>The builder for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// dtde => dtde
+    ///     .AddShardGroup("hash8", g =&gt; g.AddShards("0","1","2","3","4","5","6","7"))
+    ///     .AddShardGroup("years", g =&gt; g.AddShards("2023","2024","2025"));
+    /// </code>
+    /// </example>
+    public DtdeOptionsBuilder AddShardGroup(string groupName, Action<DtdeShardGroupBuilder> configure)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(groupName);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        if (string.Equals(groupName, IShardGroupRegistry.DefaultGroupName, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Group name '{groupName}' is reserved for the implicit default group. " +
+                "Use AddShard / AddShards / AddShardsFromConfig to populate the default group.",
+                nameof(groupName));
+        }
+
+        var groupBuilder = new DtdeShardGroupBuilder(groupName, _shards);
+        configure(groupBuilder);
+        return this;
+    }
+
+    /// <summary>
     /// Loads shards from a JSON configuration file. The file's schema is
     /// documented in <c>docs/wiki/configuration.md</c>.
     /// </summary>
@@ -322,6 +357,7 @@ public sealed class DtdeOptionsBuilder
             EnableDiagnostics = _enableDiagnostics,
             EnableTestMode = _enableTestMode,
             ShardRegistry = new Dtde.Core.Metadata.ShardRegistry(_shards),
+            ShardGroupRegistry = new Dtde.Core.Metadata.ShardGroupRegistry(_shards),
         };
 
         options.AddShards(_shards);

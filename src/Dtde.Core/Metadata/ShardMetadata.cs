@@ -11,6 +11,9 @@ public sealed class ShardMetadata : IShardMetadata
     public string ShardId { get; }
 
     /// <inheritdoc />
+    public string GroupName { get; init; } = IShardGroupRegistry.DefaultGroupName;
+
+    /// <inheritdoc />
     public string Name { get; }
 
     /// <inheritdoc />
@@ -125,6 +128,7 @@ public sealed class ShardMetadata : IShardMetadata
 public sealed class ShardMetadataBuilder
 {
     private string _shardId = string.Empty;
+    private string _groupName = IShardGroupRegistry.DefaultGroupName;
     private string _name = string.Empty;
     private ShardStorageMode _storageMode = ShardStorageMode.Tables;
     private string? _tableName;
@@ -138,13 +142,28 @@ public sealed class ShardMetadataBuilder
     private int _priority = 100;
 
     /// <summary>
-    /// Sets the unique identifier for the shard.
+    /// Sets the shard's identifier. Must be unique within the shard's
+    /// <see cref="WithGroup(string)">group</see>.
     /// </summary>
     /// <param name="shardId">The shard identifier.</param>
     /// <returns>The builder for chaining.</returns>
     public ShardMetadataBuilder WithId(string shardId)
     {
         _shardId = shardId;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the shard's group. Shards belong to a single named group; entities
+    /// pick which group they live on. Defaults to
+    /// <see cref="IShardGroupRegistry.DefaultGroupName"/>.
+    /// </summary>
+    /// <param name="groupName">The group name.</param>
+    /// <returns>The builder for chaining.</returns>
+    public ShardMetadataBuilder WithGroup(string groupName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(groupName);
+        _groupName = groupName;
         return this;
     }
 
@@ -321,6 +340,7 @@ public sealed class ShardMetadataBuilder
 
         return new ShardMetadata(_shardId, name, _storageMode)
         {
+            GroupName = _groupName,
             TableName = _tableName,
             SchemaName = _schemaName,
             ConnectionString = _connectionString,

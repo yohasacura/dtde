@@ -150,4 +150,13 @@ public interface IShardingConfiguration
     /// Only applicable when StrategyType is DateRange.
     /// </summary>
     public DateShardInterval? DateInterval { get; }
+
+    /// <summary>
+    /// Gets the name of the shard group this entity is bound to. Defaults to
+    /// <see cref="IShardGroupRegistry.DefaultGroupName"/>; override per entity
+    /// via <c>ShardingBuilder&lt;T&gt;.UseShardGroup(string)</c> when different
+    /// entities need different shard topologies (for example, eight hash
+    /// buckets for users and three yearly buckets for orders).
+    /// </summary>
+    public string ShardGroupName { get; }
 }

@@ -91,5 +91,12 @@ public static class DtdeAnnotationNames
     /// </summary>
     public const string ManualShardConfig = Prefix + "ManualShardConfig";
 
+    /// <summary>
+    /// Annotation for the name of the shard group an entity is bound to.
+    /// Defaults to <see cref="Dtde.Abstractions.Metadata.IShardGroupRegistry.DefaultGroupName"/>
+    /// when absent.
+    /// </summary>
+    public const string ShardGroupName = Prefix + "ShardGroupName";
+
     #endregion
 }
