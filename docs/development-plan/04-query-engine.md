@@ -286,7 +286,7 @@ public sealed class DtdeExpressionRewriter : ExpressionVisitor, IExpressionRewri
         }
         
         // Build the temporal predicate using configured property names
-        var predicate = BuildTemporalPredicate(entityType, metadata.Validity!, temporalPoint.Value);
+        var predicate = BuildTemporalPredicate(entityType, metadata.TemporalConfiguration!, temporalPoint.Value);
         
         // Wrap the source with a Where clause
         var whereMethod = typeof(Queryable)
@@ -301,7 +301,7 @@ public sealed class DtdeExpressionRewriter : ExpressionVisitor, IExpressionRewri
     
     private LambdaExpression BuildTemporalPredicate(
         Type entityType,
-        ValidityConfiguration validity,
+        TemporalConfiguration validity,
         DateTime temporalPoint)
     {
         var parameter = Expression.Parameter(entityType, "e");

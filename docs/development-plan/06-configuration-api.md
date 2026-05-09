@@ -556,80 +556,88 @@ public static class EntityTypeBuilderExtensions
     /// <remarks>
     /// Property names are fully configurable. Common patterns include:
     /// <list type="bullet">
-    ///   <item><c>ValidFrom/ValidTo</c> - Standard naming</item>
-    ///   <item><c>EffectiveDate/ExpirationDate</c> - Business naming</item>
-    ///   <item><c>StartDate/EndDate</c> - Calendar naming</item>
-    ///   <item><c>CreatedAt</c> (no end) - Open-ended validity</item>
+    ///   <item><c>ValidFrom/ValidTo</c> — Standard naming</item>
+    ///   <item><c>EffectiveDate/ExpirationDate</c> — Business naming</item>
+    ///   <item><c>StartDate/EndDate</c> — Calendar naming</item>
+    ///   <item><c>StartDate</c> (no end) — Open-ended validity</item>
     /// </list>
     /// </remarks>
     /// <example>
     /// <code>
     /// // With both properties
-    /// entity.HasValidity(e => e.EffectiveDate, e => e.ExpirationDate);
-    /// 
+    /// entity.HasTemporalValidity(e => e.EffectiveDate, e => e.ExpirationDate);
+    ///
     /// // Open-ended (perpetual until explicitly closed)
-    /// entity.HasValidity(e => e.StartDate);
+    /// entity.HasTemporalValidity(e => e.StartDate);
     /// </code>
     /// </example>
-    public static EntityTypeBuilder<TEntity> HasValidity<TEntity>(
+    public static EntityTypeBuilder<TEntity> HasTemporalValidity<TEntity>(
         this EntityTypeBuilder<TEntity> builder,
-        Expression<Func<TEntity, DateTime>> validFrom,
-        Expression<Func<TEntity, DateTime?>>? validTo = null)
+        Expression<Func<TEntity, DateTime>> validFromSelector,
+        Expression<Func<TEntity, DateTime?>>? validToSelector = null)
         where TEntity : class;
-    
+
     /// <summary>
-    /// Configures sharding for the entity.
+    /// Property-value sharding (region, tenant, category, etc.).
     /// </summary>
-    /// <typeparam name="TEntity">The entity type.</typeparam>
-    /// <typeparam name="TKey">The shard key type.</typeparam>
-    /// <param name="builder">The entity type builder.</param>
-    /// <param name="shardKey">Expression selecting the shard key property.</param>
-    /// <param name="strategy">The sharding strategy (default: DateRange).</param>
-    /// <returns>The builder for chaining.</returns>
     /// <example>
     /// <code>
-    /// // Date-based sharding
-    /// entity.UseSharding(e => e.TransactionDate, ShardingStrategyType.DateRange);
-    /// 
-    /// // Hash-based sharding
-    /// entity.UseSharding(e => e.CustomerId, ShardingStrategyType.Hash);
-    /// 
-    /// // Range-based sharding
-    /// entity.UseSharding(e => e.AccountNumber, ShardingStrategyType.Range);
+    /// entity.ShardBy(e => e.Region);
     /// </code>
     /// </example>
-    public static EntityTypeBuilder<TEntity> UseSharding<TEntity, TKey>(
+    public static ShardingBuilder<TEntity> ShardBy<TEntity, TKey>(
         this EntityTypeBuilder<TEntity> builder,
-        Expression<Func<TEntity, TKey>> shardKey,
-        ShardingStrategyType strategy = ShardingStrategyType.DateRange)
+        Expression<Func<TEntity, TKey>> shardKeySelector)
         where TEntity : class;
-    
+
     /// <summary>
-    /// Configures composite sharding with multiple keys.
+    /// Date-range sharding (year/quarter/month/day buckets).
     /// </summary>
-    /// <typeparam name="TEntity">The entity type.</typeparam>
-    /// <param name="builder">The entity type builder.</param>
-    /// <param name="shardKeys">Expressions selecting the shard key properties.</param>
-    /// <returns>The builder for chaining.</returns>
     /// <example>
     /// <code>
-    /// entity.UseCompositeSharding(
-    ///     e => e.Year,
-    ///     e => e.RegionId);
+    /// entity.ShardByDate(e => e.TransactionDate, DateShardInterval.Month);
     /// </code>
     /// </example>
-    public static EntityTypeBuilder<TEntity> UseCompositeSharding<TEntity>(
+    public static ShardingBuilder<TEntity> ShardByDate<TEntity>(
         this EntityTypeBuilder<TEntity> builder,
-        params Expression<Func<TEntity, object>>[] shardKeys)
+        Expression<Func<TEntity, DateTime>> dateSelector,
+        DateShardInterval interval = DateShardInterval.Year)
         where TEntity : class;
-    
+
+    /// <summary>
+    /// Hash sharding for even distribution across a fixed shard count.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// entity.ShardByHash(e => e.CustomerId, shardCount: 8);
+    /// </code>
+    /// </example>
+    public static ShardingBuilder<TEntity> ShardByHash<TEntity, TKey>(
+        this EntityTypeBuilder<TEntity> builder,
+        Expression<Func<TEntity, TKey>> shardKeySelector,
+        int shardCount = 4)
+        where TEntity : class;
+
+    /// <summary>
+    /// Manual sharding against pre-existing tables managed externally.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// entity.UseManualSharding(config =>
+    /// {
+    ///     config.AddTable("dbo.Orders_2023", o => o.OrderDate.Year == 2023);
+    ///     config.AddTable("dbo.Orders_2024", o => o.OrderDate.Year == 2024);
+    /// });
+    /// </code>
+    /// </example>
+    public static EntityTypeBuilder<TEntity> UseManualSharding<TEntity>(
+        this EntityTypeBuilder<TEntity> builder,
+        Action<ManualShardingConfiguration<TEntity>> configureManual)
+        where TEntity : class;
+
     /// <summary>
     /// Configures temporal containment rules for parent-child relationships.
     /// </summary>
-    /// <typeparam name="TEntity">The entity type.</typeparam>
-    /// <param name="builder">The entity type builder.</param>
-    /// <param name="rule">The containment rule to apply.</param>
-    /// <returns>The builder for chaining.</returns>
     /// <example>
     /// <code>
     /// // Child validity must be within parent validity

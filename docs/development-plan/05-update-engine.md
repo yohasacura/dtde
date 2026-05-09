@@ -195,7 +195,7 @@ public sealed class DtdeUpdateProcessor : IDtdeUpdateProcessor
         EntityMetadata metadata,
         string correlationId)
     {
-        var validity = metadata.Validity!;
+        var validity = metadata.TemporalConfiguration!;
         var entity = entry.Entity;
         
         var validFrom = (DateTime)validity.ValidFromProperty.GetValue(entity)!;
@@ -225,7 +225,7 @@ public sealed class DtdeUpdateProcessor : IDtdeUpdateProcessor
         EntityMetadata metadata,
         string correlationId)
     {
-        var validity = metadata.Validity!;
+        var validity = metadata.TemporalConfiguration!;
         var entity = entry.Entity;
         
         // Get original values (the version being superseded)
@@ -262,7 +262,7 @@ public sealed class DtdeUpdateProcessor : IDtdeUpdateProcessor
         EntityMetadata metadata,
         string correlationId)
     {
-        var validity = metadata.Validity!;
+        var validity = metadata.TemporalConfiguration!;
         var entity = entry.Entity;
         
         var originalValidFrom = (DateTime)entry.OriginalValues[validity.ValidFromProperty.PropertyName]!;
@@ -447,7 +447,7 @@ public sealed class VersionManager : IVersionManager
     private ProcessedVersionOperation ProcessCreate(VersionOperation operation)
     {
         var metadata = operation.EntityMetadata;
-        var validity = metadata.Validity!;
+        var validity = metadata.TemporalConfiguration!;
         
         // Set validity properties on the entity
         validity.ValidFromProperty.SetValue(operation.Entity, operation.NewValidFrom);
@@ -478,7 +478,7 @@ public sealed class VersionManager : IVersionManager
         CancellationToken cancellationToken)
     {
         var metadata = operation.EntityMetadata;
-        var validity = metadata.Validity!;
+        var validity = metadata.TemporalConfiguration!;
         var bumpDate = operation.VersionBumpDate!.Value;
         
         // Create commands for both invalidation and new version
@@ -721,7 +721,7 @@ public sealed class ShardWriteRouter : IShardWriteRouter
                 .First(s => !s.IsReadOnly);
         }
         
-        var strategy = metadata.Sharding!.Strategy;
+        var strategy = metadata.ShardingConfiguration!.Strategy;
         
         return command.CommandType switch
         {
@@ -757,7 +757,7 @@ public sealed class ShardWriteRouter : IShardWriteRouter
             // Find shard containing the original validity start
             var predicates = new Dictionary<string, object?>
             {
-                [metadata.Validity!.ValidFromProperty.PropertyName] = sourceOperation.OriginalValidFrom
+                [metadata.TemporalConfiguration!.ValidFromProperty.PropertyName] = sourceOperation.OriginalValidFrom
             };
             
             var shards = strategy.ResolveShards(
@@ -987,7 +987,7 @@ public sealed class DistributedWriteExecutor : IDistributedWriteExecutor
         CancellationToken cancellationToken)
     {
         var metadata = command.EntityMetadata;
-        var validity = metadata.Validity!;
+        var validity = metadata.TemporalConfiguration!;
         
         // Build UPDATE statement to close validity period
         var sql = $"""

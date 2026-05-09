@@ -267,172 +267,146 @@ public sealed class DtdeOptionsExtension : IDbContextOptionsExtension
 
 ### 3.1 Entity Type Builder Extensions
 
+DTDE configures entities through extension methods on `EntityTypeBuilder<TEntity>`.
+The shipped surface uses three verb prefixes consistently:
+
+| Prefix | Purpose | Methods |
+|---|---|---|
+| `ShardBy*` | Primary sharding configuration. Returns `ShardingBuilder<TEntity>` for chained options. | `ShardBy`, `ShardByDate`, `ShardByHash` |
+| `Has*` | EF Core-style property configuration. | `HasTemporalValidity`, `HasTemporalContainment` |
+| `Use*` | Opt-in to externally-managed table layouts. | `UseManualSharding` |
+
 ```csharp
 namespace Dtde.EntityFramework.Extensions;
 
 /// <summary>
-/// Extension methods for configuring temporal and sharding behavior on entities.
+/// EF Core <see cref="EntityTypeBuilder{TEntity}"/> extensions that configure
+/// DTDE's sharding and temporal behaviour declaratively from <c>OnModelCreating</c>.
 /// </summary>
 public static class EntityTypeBuilderExtensions
 {
+    // -------- Sharding --------
+
     /// <summary>
-    /// Configures temporal validity properties for the entity.
-    /// Property names are fully configurable.
+    /// Property-value sharding: rows are routed by a discriminator property
+    /// such as a region code or tenant identifier.
     /// </summary>
-    /// <typeparam name="TEntity">The entity type.</typeparam>
-    /// <param name="builder">The entity type builder.</param>
-    /// <param name="validFromSelector">Expression selecting the validity start property.</param>
-    /// <param name="validToSelector">Optional expression selecting the validity end property.</param>
-    /// <returns>The builder for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// modelBuilder.Entity&lt;Customer&gt;()
+    ///     .ShardBy(c => c.Region)
+    ///     .WithStorageMode(ShardStorageMode.Tables);
+    /// </code>
+    /// </example>
+    public static ShardingBuilder<TEntity> ShardBy<TEntity, TKey>(
+        this EntityTypeBuilder<TEntity> builder,
+        Expression<Func<TEntity, TKey>> shardKeySelector)
+        where TEntity : class;
+
+    /// <summary>
+    /// Date-range sharding: rows are routed into time-bucketed shards
+    /// (year, quarter, month, or day) by a date property.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// modelBuilder.Entity&lt;Order&gt;()
+    ///     .ShardByDate(o => o.OrderDate, DateShardInterval.Year);
+    /// </code>
+    /// </example>
+    public static ShardingBuilder<TEntity> ShardByDate<TEntity>(
+        this EntityTypeBuilder<TEntity> builder,
+        Expression<Func<TEntity, DateTime>> dateSelector,
+        DateShardInterval interval = DateShardInterval.Year)
+        where TEntity : class;
+
+    /// <summary>
+    /// Hash-based sharding for even distribution across a fixed shard count.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// modelBuilder.Entity&lt;Product&gt;()
+    ///     .ShardByHash(p => p.Id, shardCount: 8);
+    /// </code>
+    /// </example>
+    public static ShardingBuilder<TEntity> ShardByHash<TEntity, TKey>(
+        this EntityTypeBuilder<TEntity> builder,
+        Expression<Func<TEntity, TKey>> shardKeySelector,
+        int shardCount = 4)
+        where TEntity : class;
+
+    /// <summary>
+    /// Manual sharding with pre-existing tables, typically managed by a SQL
+    /// project or DBA-owned process. Each table is mapped via a routing predicate.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// modelBuilder.Entity&lt;Order&gt;()
+    ///     .UseManualSharding(config =>
+    ///     {
+    ///         config.AddTable("dbo.Orders_2023", o => o.OrderDate.Year == 2023);
+    ///         config.AddTable("dbo.Orders_2024", o => o.OrderDate.Year == 2024);
+    ///         config.MigrationsEnabled = false;
+    ///     });
+    /// </code>
+    /// </example>
+    public static EntityTypeBuilder<TEntity> UseManualSharding<TEntity>(
+        this EntityTypeBuilder<TEntity> builder,
+        Action<ManualShardingConfiguration<TEntity>> configureManual)
+        where TEntity : class;
+
+    // -------- Temporal validity --------
+
+    /// <summary>
+    /// Configures bi-temporal validity tracking. Property names are user-defined,
+    /// so any pair of <c>DateTime</c>/<c>DateTime?</c> properties works.
+    /// </summary>
     /// <example>
     /// <code>
     /// // Standard naming
     /// modelBuilder.Entity&lt;Contract&gt;()
-    ///     .HasValidity(c => c.ValidFrom, c => c.ValidTo);
-    /// 
+    ///     .HasTemporalValidity(c => c.ValidFrom, c => c.ValidTo);
+    ///
     /// // Domain-specific naming
     /// modelBuilder.Entity&lt;Policy&gt;()
-    ///     .HasValidity(p => p.EffectiveDate, p => p.ExpirationDate);
-    /// 
+    ///     .HasTemporalValidity(p => p.EffectiveDate, p => p.ExpirationDate);
+    ///
     /// // Open-ended validity (no end date)
     /// modelBuilder.Entity&lt;Subscription&gt;()
-    ///     .HasValidity(s => s.StartDate);
+    ///     .HasTemporalValidity(s => s.StartDate);
     /// </code>
     /// </example>
-    public static EntityTypeBuilder<TEntity> HasValidity<TEntity>(
+    public static EntityTypeBuilder<TEntity> HasTemporalValidity<TEntity>(
         this EntityTypeBuilder<TEntity> builder,
         Expression<Func<TEntity, DateTime>> validFromSelector,
         Expression<Func<TEntity, DateTime?>>? validToSelector = null)
-        where TEntity : class
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(validFromSelector);
-        
-        var validFromProperty = ExtractPropertyName(validFromSelector);
-        var validToProperty = validToSelector is not null 
-            ? ExtractPropertyName(validToSelector) 
-            : null;
-        
-        // Store configuration in model annotations
-        builder.Metadata.SetAnnotation(
-            DtdeAnnotationNames.ValidFromProperty, 
-            validFromProperty);
-        
-        if (validToProperty is not null)
-        {
-            builder.Metadata.SetAnnotation(
-                DtdeAnnotationNames.ValidToProperty, 
-                validToProperty);
-        }
-        
-        builder.Metadata.SetAnnotation(
-            DtdeAnnotationNames.IsTemporal, 
-            true);
-        
-        return builder;
-    }
-    
+        where TEntity : class;
+
     /// <summary>
-    /// Configures sharding for the entity.
+    /// Overload for entities whose validity-end property is non-nullable.
     /// </summary>
-    /// <typeparam name="TEntity">The entity type.</typeparam>
-    /// <typeparam name="TKey">The shard key type.</typeparam>
-    /// <param name="builder">The entity type builder.</param>
-    /// <param name="shardKeySelector">Expression selecting the shard key property.</param>
-    /// <param name="strategy">The sharding strategy to use.</param>
-    /// <returns>The builder for chaining.</returns>
-    /// <example>
-    /// <code>
-    /// // Date-based sharding
-    /// modelBuilder.Entity&lt;Transaction&gt;()
-    ///     .UseSharding(t => t.TransactionDate, ShardingStrategyType.DateRange);
-    /// 
-    /// // Hash-based sharding
-    /// modelBuilder.Entity&lt;Customer&gt;()
-    ///     .UseSharding(c => c.RegionId, ShardingStrategyType.Hash);
-    /// </code>
-    /// </example>
-    public static EntityTypeBuilder<TEntity> UseSharding<TEntity, TKey>(
+    public static EntityTypeBuilder<TEntity> HasTemporalValidity<TEntity>(
         this EntityTypeBuilder<TEntity> builder,
-        Expression<Func<TEntity, TKey>> shardKeySelector,
-        ShardingStrategyType strategy = ShardingStrategyType.DateRange)
-        where TEntity : class
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(shardKeySelector);
-        
-        var shardKeyProperty = ExtractPropertyName(shardKeySelector);
-        
-        builder.Metadata.SetAnnotation(
-            DtdeAnnotationNames.ShardKeyProperty, 
-            shardKeyProperty);
-        
-        builder.Metadata.SetAnnotation(
-            DtdeAnnotationNames.ShardingStrategy, 
-            strategy);
-        
-        builder.Metadata.SetAnnotation(
-            DtdeAnnotationNames.IsSharded, 
-            true);
-        
-        return builder;
-    }
-    
+        Expression<Func<TEntity, DateTime>> validFromSelector,
+        Expression<Func<TEntity, DateTime>> validToSelector)
+        where TEntity : class;
+
     /// <summary>
-    /// Configures composite sharding for the entity.
+    /// Configures the temporal containment rule for parent-child relationships
+    /// (whether child validity must fall inside the parent's validity range).
     /// </summary>
-    /// <typeparam name="TEntity">The entity type.</typeparam>
-    /// <param name="builder">The entity type builder.</param>
-    /// <param name="shardKeySelectors">Expressions selecting the shard key properties.</param>
-    /// <returns>The builder for chaining.</returns>
-    public static EntityTypeBuilder<TEntity> UseCompositeSharding<TEntity>(
+    public static EntityTypeBuilder<TEntity> HasTemporalContainment<TEntity>(
         this EntityTypeBuilder<TEntity> builder,
-        params Expression<Func<TEntity, object>>[] shardKeySelectors)
-        where TEntity : class
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(shardKeySelectors);
-        
-        if (shardKeySelectors.Length < 2)
-        {
-            throw new ArgumentException(
-                "Composite sharding requires at least two key properties.",
-                nameof(shardKeySelectors));
-        }
-        
-        var shardKeyProperties = shardKeySelectors
-            .Select(ExtractPropertyName)
-            .ToList();
-        
-        builder.Metadata.SetAnnotation(
-            DtdeAnnotationNames.ShardKeyProperties, 
-            shardKeyProperties);
-        
-        builder.Metadata.SetAnnotation(
-            DtdeAnnotationNames.ShardingStrategy, 
-            ShardingStrategyType.Composite);
-        
-        builder.Metadata.SetAnnotation(
-            DtdeAnnotationNames.IsSharded, 
-            true);
-        
-        return builder;
-    }
-    
-    private static string ExtractPropertyName<TEntity, TProperty>(
-        Expression<Func<TEntity, TProperty>> selector)
-    {
-        return selector.Body switch
-        {
-            MemberExpression { Member: PropertyInfo property } => property.Name,
-            UnaryExpression { Operand: MemberExpression { Member: PropertyInfo prop } } => prop.Name,
-            _ => throw new ArgumentException(
-                $"Expression must be a property accessor: {selector}",
-                nameof(selector))
-        };
-    }
+        TemporalContainmentRule rule)
+        where TEntity : class;
 }
 ```
+
+The implementations live in
+[`src/Dtde.EntityFramework/Extensions/EntityTypeBuilderExtensions.cs`](../../src/Dtde.EntityFramework/Extensions/EntityTypeBuilderExtensions.cs)
+and write metadata via `DtdeAnnotationNames` constants on the EF model. The
+chained builder type [`ShardingBuilder<TEntity>`](../../src/Dtde.EntityFramework/Configuration/ShardingBuilder.cs)
+exposes `WithStorageMode`, `WithTablePattern`, `WithoutMigrations`, and
+`AddDatabase` for advanced storage scenarios.
 
 ### 3.2 Annotation Names
 
@@ -618,8 +592,8 @@ namespace Dtde.EntityFramework.Context;
 ///         base.OnModelCreating(modelBuilder);
 ///         
 ///         modelBuilder.Entity&lt;Contract&gt;()
-///             .HasValidity(c => c.EffectiveDate, c => c.ExpirationDate)
-///             .UseSharding(c => c.EffectiveDate, ShardingStrategyType.DateRange);
+///             .HasTemporalValidity(c => c.EffectiveDate, c => c.ExpirationDate)
+///             .ShardByDate(c => c.EffectiveDate, DateShardInterval.Year);
 ///     }
 /// }
 /// </code>

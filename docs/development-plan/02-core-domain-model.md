@@ -68,7 +68,7 @@ public sealed class EntityMetadata
     /// Gets the optional validity period configuration.
     /// Null if entity is not temporal.
     /// </summary>
-    public ValidityConfiguration? Validity { get; }
+    public TemporalConfiguration? Validity { get; }
     
     /// <summary>
     /// Gets the optional sharding configuration.
@@ -102,22 +102,22 @@ namespace Dtde.Core.Metadata;
 /// <example>
 /// <code>
 /// // Standard naming
-/// new ValidityConfiguration(
+/// new TemporalConfiguration(
 ///     validFromProperty: "ValidFrom",
 ///     validToProperty: "ValidTo");
 /// 
 /// // Domain-specific naming
-/// new ValidityConfiguration(
+/// new TemporalConfiguration(
 ///     validFromProperty: "EffectiveDate",
 ///     validToProperty: "ExpirationDate");
 /// 
 /// // Open-ended (no end date)
-/// new ValidityConfiguration(
+/// new TemporalConfiguration(
 ///     validFromProperty: "StartDate",
 ///     validToProperty: null);
 /// </code>
 /// </example>
-public sealed class ValidityConfiguration
+public sealed class TemporalConfiguration
 {
     /// <summary>
     /// Gets the property representing the start of validity period.
@@ -145,7 +145,7 @@ public sealed class ValidityConfiguration
     /// </summary>
     /// <param name="validFromProperty">The property representing validity start.</param>
     /// <param name="validToProperty">The optional property representing validity end.</param>
-    public ValidityConfiguration(
+    public TemporalConfiguration(
         PropertyMetadata validFromProperty,
         PropertyMetadata? validToProperty = null)
     {
@@ -742,7 +742,7 @@ public sealed class DateRangeShardingStrategy : IShardingStrategy
         object entityInstance)
     {
         // Extract validity start date from entity
-        var validityConfig = entity.Validity 
+        var validityConfig = entity.TemporalConfiguration 
             ?? throw new InvalidOperationException(
                 $"Entity {entity.ClrType.Name} is not configured for temporal sharding.");
         
@@ -760,10 +760,10 @@ public sealed class DateRangeShardingStrategy : IShardingStrategy
         IReadOnlyDictionary<string, object?> predicates,
         EntityMetadata entity)
     {
-        if (entity.Validity is null) return false;
+        if (entity.TemporalConfiguration is null) return false;
         
-        var validFromName = entity.Validity.ValidFromProperty.PropertyName;
-        var validToName = entity.Validity.ValidToProperty?.PropertyName;
+        var validFromName = entity.TemporalConfiguration.ValidFromProperty.PropertyName;
+        var validToName = entity.TemporalConfiguration.ValidToProperty?.PropertyName;
         
         return predicates.ContainsKey(validFromName) 
             || (validToName is not null && predicates.ContainsKey(validToName));
@@ -806,7 +806,7 @@ public sealed class HashShardingStrategy : IShardingStrategy
         IReadOnlyDictionary<string, object?> predicates,
         DateTime? temporalContext)
     {
-        var shardKeyProperty = entity.Sharding?.ShardKeyProperties.FirstOrDefault()
+        var shardKeyProperty = entity.ShardingConfiguration?.ShardKeyProperties.FirstOrDefault()
             ?? throw new InvalidOperationException(
                 $"Entity {entity.ClrType.Name} has no shard key configured.");
         
@@ -832,7 +832,7 @@ public sealed class HashShardingStrategy : IShardingStrategy
         IShardRegistry shardRegistry,
         object entityInstance)
     {
-        var shardKeyProperty = entity.Sharding?.ShardKeyProperties.FirstOrDefault()
+        var shardKeyProperty = entity.ShardingConfiguration?.ShardKeyProperties.FirstOrDefault()
             ?? throw new InvalidOperationException(
                 $"Entity {entity.ClrType.Name} has no shard key configured.");
         
