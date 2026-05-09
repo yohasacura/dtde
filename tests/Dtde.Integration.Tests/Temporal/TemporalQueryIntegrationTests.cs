@@ -180,17 +180,15 @@ public class TemporalTestDbContext : DtdeDbContext
     {
         base.OnConfiguring(optionsBuilder);
 
-        optionsBuilder.UseDtde(dtde =>
-        {
-            dtde.ConfigureEntity<Product>(entity =>
-            {
-                entity.HasTemporalValidity(
-                    validFrom: nameof(Product.ValidFrom),
-                    validTo: nameof(Product.ValidTo));
-            });
+        optionsBuilder.UseDtde(dtde => dtde.EnableTestMode());
+    }
 
-            dtde.EnableTestMode();
-        });
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Product>()
+            .HasTemporalValidity(p => p.ValidFrom, p => p.ValidTo);
     }
 }
 

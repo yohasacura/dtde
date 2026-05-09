@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.IO;
 using System.Text.Json;
 
 using Dtde.Abstractions.Metadata;
@@ -6,8 +8,50 @@ using Dtde.Core.Metadata;
 namespace Dtde.EntityFramework.Configuration;
 
 /// <summary>
-/// Builder for configuring DTDE options with fluent API.
+/// Fluent builder for configuring DTDE inside <c>UseDtde(...)</c>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// All entity configuration (sharding, temporal validity) lives in
+/// <c>DbContext.OnModelCreating</c> — it is not configured here. This builder
+/// only declares the available shards and global runtime options.
+/// </para>
+/// <para>
+/// The shard-registration overloads, in order of preference for everyday use:
+/// </para>
+/// <list type="bullet">
+///   <item>
+///     <description>
+///     <see cref="AddShards(string[])"/> — bulk table-mode for the simple case
+///     (single database, multiple per-shard tables).
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///     <see cref="AddShard(string, string)"/> — database-mode shorthand:
+///     supply the shard id and a connection string.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///     <see cref="AddShard(string)"/> — single table-mode shard shorthand.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///     <see cref="AddShard(System.Action{ShardMetadataBuilder})"/> — full fluent
+///     control: tier, read-only, date range, key range, custom name and
+///     priority.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///     <see cref="AddShardsFromConfig(string)"/> — load shard definitions from a
+///     JSON file (operations-team-friendly).
+///     </description>
+///   </item>
+/// </list>
+/// </remarks>
 public sealed class DtdeOptionsBuilder
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -16,46 +60,126 @@ public sealed class DtdeOptionsBuilder
     };
 
     private readonly List<IShardMetadata> _shards = [];
-    private readonly MetadataRegistry _metadataRegistry = new();
     private Func<DateTime>? _defaultTemporalContextProvider;
     private int _maxParallelShards = 10;
     private bool _enableDiagnostics;
     private bool _enableTestMode;
 
+    // ------------------------------------------------------------------
+    //  Shard registration — shorthand overloads (the common path)
+    // ------------------------------------------------------------------
+
     /// <summary>
-    /// Configures entity metadata for a specific type.
+    /// Adds a table-mode shard for the given shard-key value. The shard's
+    /// connection string is inherited from the parent <c>DbContextOptions</c>;
+    /// the table name is derived from the entity's
+    /// <c>WithTablePattern</c> setting (or the entity's table name + shard id).
     /// </summary>
-    /// <typeparam name="TEntity">The entity type to configure.</typeparam>
-    /// <param name="configure">Action to configure the entity metadata.</param>
+    /// <param name="shardId">The shard identifier; also used as the shard-key value.</param>
     /// <returns>The builder for chaining.</returns>
-    public DtdeOptionsBuilder ConfigureEntity<TEntity>(Action<EntityMetadataBuilder<TEntity>> configure) where TEntity : class
+    /// <example>
+    /// <code>
+    /// dtde.AddShard("EU");
+    /// </code>
+    /// </example>
+    public DtdeOptionsBuilder AddShard(string shardId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(shardId);
+
+        _shards.Add(new ShardMetadataBuilder()
+            .WithId(shardId)
+            .WithName(shardId)
+            .WithShardKeyValue(shardId)
+            .WithStorageMode(ShardStorageMode.Tables)
+            .Build());
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a database-mode shard for the given shard-key value with its own
+    /// connection string.
+    /// </summary>
+    /// <param name="shardId">The shard identifier; also used as the shard-key value.</param>
+    /// <param name="connectionString">The connection string for this shard's database.</param>
+    /// <returns>The builder for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// dtde.AddShard("EU", "Server=eu-db;Database=Customers;...");
+    /// </code>
+    /// </example>
+    public DtdeOptionsBuilder AddShard(string shardId, string connectionString)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(shardId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+
+        _shards.Add(new ShardMetadataBuilder()
+            .WithId(shardId)
+            .WithName(shardId)
+            .WithShardKeyValue(shardId)
+            .WithConnectionString(connectionString)
+            .Build());
+        return this;
+    }
+
+    /// <summary>
+    /// Adds multiple table-mode shards in one call. Each shard id doubles as
+    /// the shard-key value. The connection string is inherited from the parent
+    /// <c>DbContextOptions</c>.
+    /// </summary>
+    /// <param name="shardIds">The shard identifiers.</param>
+    /// <returns>The builder for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// dtde.AddShards("EU", "US", "APAC");
+    /// </code>
+    /// </example>
+    public DtdeOptionsBuilder AddShards(params string[] shardIds)
+    {
+        ArgumentNullException.ThrowIfNull(shardIds);
+
+        foreach (var shardId in shardIds)
+        {
+            AddShard(shardId);
+        }
+        return this;
+    }
+
+    // ------------------------------------------------------------------
+    //  Shard registration — full control
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Adds a shard configured via the full fluent <see cref="ShardMetadataBuilder"/>.
+    /// Use this when you need to set tier, priority, read-only, date/key ranges,
+    /// or any other advanced option.
+    /// </summary>
+    /// <param name="configure">Callback that configures the shard.</param>
+    /// <returns>The builder for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// dtde.AddShard(s => s
+    ///     .WithId("2024-archive")
+    ///     .WithConnectionString(archiveConnectionString)
+    ///     .WithTier(ShardTier.Cold)
+    ///     .AsReadOnly());
+    /// </code>
+    /// </example>
+    public DtdeOptionsBuilder AddShard(Action<ShardMetadataBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var builder = new EntityMetadataBuilder<TEntity>();
+        var builder = new ShardMetadataBuilder();
         configure(builder);
-        var metadata = builder.Build();
-        _metadataRegistry.RegisterEntity(metadata);
+        _shards.Add(builder.Build());
 
         return this;
     }
 
     /// <summary>
-    /// Adds a pre-built shard metadata.
+    /// Loads shards from a JSON configuration file. The file's schema is
+    /// documented in <c>docs/wiki/configuration.md</c>.
     /// </summary>
-    /// <param name="shard">The shard metadata to add.</param>
-    /// <returns>The builder for chaining.</returns>
-    public DtdeOptionsBuilder AddShard(IShardMetadata shard)
-    {
-        ArgumentNullException.ThrowIfNull(shard);
-        _shards.Add(shard);
-        return this;
-    }
-
-    /// <summary>
-    /// Adds shards from a JSON configuration file.
-    /// </summary>
-    /// <param name="configPath">Path to the shard configuration file.</param>
+    /// <param name="configPath">Path to the JSON file.</param>
     /// <returns>The builder for chaining.</returns>
     public DtdeOptionsBuilder AddShardsFromConfig(string configPath)
     {
@@ -97,49 +221,29 @@ public sealed class DtdeOptionsBuilder
         return this;
     }
 
-    /// <summary>
-    /// Adds a single shard configuration.
-    /// </summary>
-    /// <param name="configure">Action to configure the shard.</param>
-    /// <returns>The builder for chaining.</returns>
-    public DtdeOptionsBuilder AddShard(Action<ShardMetadataBuilder> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-
-        var builder = new ShardMetadataBuilder();
-        configure(builder);
-        _shards.Add(builder.Build());
-
-        return this;
-    }
+    // ------------------------------------------------------------------
+    //  Global runtime options
+    // ------------------------------------------------------------------
 
     /// <summary>
-    /// Adds multiple shards from an existing collection.
+    /// Sets the function returning the default "now" used by temporal queries
+    /// when no explicit point-in-time is supplied. Defaults to <see cref="DateTime.UtcNow"/>.
     /// </summary>
-    /// <param name="shards">The shards to add.</param>
-    /// <returns>The builder for chaining.</returns>
-    public DtdeOptionsBuilder AddShards(IEnumerable<IShardMetadata> shards)
-    {
-        ArgumentNullException.ThrowIfNull(shards);
-        _shards.AddRange(shards);
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the default temporal context provider.
-    /// </summary>
-    /// <param name="provider">Function returning the default temporal point.</param>
+    /// <param name="provider">The "now" provider.</param>
     /// <returns>The builder for chaining.</returns>
     public DtdeOptionsBuilder SetDefaultTemporalContext(Func<DateTime> provider)
     {
+        ArgumentNullException.ThrowIfNull(provider);
+
         _defaultTemporalContextProvider = provider;
         return this;
     }
 
     /// <summary>
-    /// Sets the maximum number of shards to query in parallel.
+    /// Sets the maximum number of shards DTDE will query in parallel
+    /// when fanning out a query.
     /// </summary>
-    /// <param name="maxParallel">Maximum parallel shard queries.</param>
+    /// <param name="maxParallel">Maximum parallel shard queries. Must be positive.</param>
     /// <returns>The builder for chaining.</returns>
     public DtdeOptionsBuilder SetMaxParallelShards(int maxParallel)
     {
@@ -149,7 +253,7 @@ public sealed class DtdeOptionsBuilder
     }
 
     /// <summary>
-    /// Enables diagnostic logging and events.
+    /// Enables verbose diagnostic logging for shard routing and query execution.
     /// </summary>
     /// <returns>The builder for chaining.</returns>
     public DtdeOptionsBuilder EnableDiagnostics()
@@ -159,7 +263,8 @@ public sealed class DtdeOptionsBuilder
     }
 
     /// <summary>
-    /// Enables test mode (single shard, no distribution).
+    /// Enables test mode (single-shard fallback, no fan-out). Use only in
+    /// integration tests where you don't want to spin up multiple databases.
     /// </summary>
     /// <returns>The builder for chaining.</returns>
     public DtdeOptionsBuilder EnableTestMode()
@@ -168,15 +273,14 @@ public sealed class DtdeOptionsBuilder
         return this;
     }
 
-    /// <summary>
-    /// Builds the DTDE options.
-    /// </summary>
-    /// <returns>The configured options.</returns>
+    // ------------------------------------------------------------------
+    //  Build
+    // ------------------------------------------------------------------
+
     internal DtdeOptions Build()
     {
         var options = new DtdeOptions
         {
-            MetadataRegistry = _metadataRegistry,
             DefaultTemporalContextProvider = _defaultTemporalContextProvider,
             MaxParallelShards = _maxParallelShards,
             EnableDiagnostics = _enableDiagnostics,
@@ -190,7 +294,7 @@ public sealed class DtdeOptionsBuilder
 }
 
 /// <summary>
-/// JSON configuration file structure for shards.
+/// JSON file shape consumed by <see cref="DtdeOptionsBuilder.AddShardsFromConfig(string)"/>.
 /// </summary>
 internal sealed class ShardConfigurationFile
 {
@@ -198,7 +302,7 @@ internal sealed class ShardConfigurationFile
 }
 
 /// <summary>
-/// Individual shard configuration entry in JSON.
+/// Single shard entry in a shard-configuration JSON file.
 /// </summary>
 internal sealed class ShardConfigurationEntry
 {

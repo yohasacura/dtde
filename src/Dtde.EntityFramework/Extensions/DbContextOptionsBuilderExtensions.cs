@@ -7,16 +7,23 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 namespace Dtde.EntityFramework.Extensions;
 
 /// <summary>
-/// Extension methods for DbContextOptionsBuilder to configure DTDE.
+/// EF Core <see cref="DbContextOptionsBuilder"/> extension for wiring DTDE
+/// directly into an <c>AddDbContext</c> call.
 /// </summary>
+/// <remarks>
+/// Most applications should use <see cref="ServiceCollectionExtensions.AddDtdeDbContext{TContext}(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action{DbContextOptionsBuilder}, System.Action{DtdeOptionsBuilder})"/>
+/// — the one-call canonical entry. <see cref="UseDtde{TContext}(DbContextOptionsBuilder{TContext}, System.Action{DtdeOptionsBuilder})"/>
+/// is provided for setups that compose <c>AddDbContext</c> manually and don't
+/// need the transparent cross-shard transaction interceptor.
+/// </remarks>
 public static class DbContextOptionsBuilderExtensions
 {
     /// <summary>
-    /// Configures the context to use DTDE with the specified options (generic version).
+    /// Configures the typed <see cref="DbContextOptionsBuilder{TContext}"/> to use DTDE.
     /// </summary>
     /// <typeparam name="TContext">The DbContext type.</typeparam>
     /// <param name="optionsBuilder">The options builder.</param>
-    /// <param name="configureOptions">The action to configure DTDE options.</param>
+    /// <param name="configureOptions">DTDE configuration callback.</param>
     /// <returns>The typed options builder for chaining.</returns>
     public static DbContextOptionsBuilder<TContext> UseDtde<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
@@ -28,33 +35,18 @@ public static class DbContextOptionsBuilderExtensions
     }
 
     /// <summary>
-    /// Configures the context to use DTDE with default options (generic version).
-    /// </summary>
-    /// <typeparam name="TContext">The DbContext type.</typeparam>
-    /// <param name="optionsBuilder">The options builder.</param>
-    /// <returns>The typed options builder for chaining.</returns>
-    public static DbContextOptionsBuilder<TContext> UseDtde<TContext>(
-        this DbContextOptionsBuilder<TContext> optionsBuilder)
-        where TContext : DbContext
-    {
-        return optionsBuilder.UseDtde(_ => { });
-    }
-
-    /// <summary>
-    /// Configures the context to use DTDE with the specified options.
+    /// Configures the <see cref="DbContextOptionsBuilder"/> to use DTDE.
     /// </summary>
     /// <param name="optionsBuilder">The options builder.</param>
-    /// <param name="configureOptions">The action to configure DTDE options.</param>
+    /// <param name="configureOptions">DTDE configuration callback.</param>
     /// <returns>The options builder for chaining.</returns>
     /// <example>
     /// <code>
     /// services.AddDbContext&lt;AppDbContext&gt;(options =>
     ///     options.UseSqlServer(connectionString)
     ///            .UseDtde(dtde => dtde
-    ///                .AddShard("Shard2024", s => s
-    ///                    .WithTier(ShardTier.Hot)
-    ///                    .WithConnectionString(hotConnection))
-    ///                .SetDefaultTemporalContext(DateTime.UtcNow)));
+    ///                .AddShard("EU", euConnectionString)
+    ///                .AddShard("US", usConnectionString)));
     /// </code>
     /// </example>
     public static DbContextOptionsBuilder UseDtde(
@@ -67,33 +59,14 @@ public static class DbContextOptionsBuilderExtensions
         var builder = new DtdeOptionsBuilder();
         configureOptions(builder);
 
-        var extension = optionsBuilder.Options.FindExtension<DtdeOptionsExtension>()
-            ?? new DtdeOptionsExtension();
-
-        extension = extension.WithOptions(builder.Build());
-
-        ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension);
-
-        return optionsBuilder;
+        return optionsBuilder.UseDtdeOptions(builder.Build());
     }
 
     /// <summary>
-    /// Configures the context to use DTDE with default options.
+    /// Internal hook used by <c>AddDtdeDbContext</c> to wire pre-built
+    /// <see cref="DtdeOptions"/> into the EF Core options pipeline.
     /// </summary>
-    /// <param name="optionsBuilder">The options builder.</param>
-    /// <returns>The options builder for chaining.</returns>
-    public static DbContextOptionsBuilder UseDtde(this DbContextOptionsBuilder optionsBuilder)
-    {
-        return optionsBuilder.UseDtde(_ => { });
-    }
-
-    /// <summary>
-    /// Configures the context to use DTDE with pre-built options.
-    /// </summary>
-    /// <param name="optionsBuilder">The options builder.</param>
-    /// <param name="options">The pre-built DTDE options.</param>
-    /// <returns>The options builder for chaining.</returns>
-    public static DbContextOptionsBuilder UseDtde(
+    internal static DbContextOptionsBuilder UseDtdeOptions(
         this DbContextOptionsBuilder optionsBuilder,
         DtdeOptions options)
     {

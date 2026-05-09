@@ -7,7 +7,100 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+> **Breaking release in progress.** This entry collapses several redundant
+> configuration paths from v1.0.0 into a single canonical setup. The migration
+> is straightforward (5-10 lines per project); see "Migrating from 1.0.0" below.
+> The next published version number is to be decided.
+
+### Why
+
+A first-time user of v1.0 had to choose between two DI registration helpers,
+two entity-configuration paths (extension methods on `EntityTypeBuilder<T>` and
+`DtdeOptionsBuilder.ConfigureEntity<T>`), three shard-registration overloads
+plus an inline-on-builder option, and several `[Obsolete]` aliases for backward
+compatibility. This pass picks one of each.
+
 ### Added
+
+- **`dtde.AddShard(string id)`** — table-mode shard shorthand. The shard's id
+  doubles as the shard-key value; the connection string is inherited from the
+  parent `DbContextOptions`.
+- **`dtde.AddShard(string id, string connectionString)`** — database-mode shard
+  shorthand for the per-shard-database case.
+- **`dtde.AddShards(params string[] ids)`** — bulk table-mode helper:
+  `dtde.AddShards("EU", "US", "APAC")`.
+- **`OnModelCreating` → registry bridge.** `DtdeDbContext` now lifts DTDE
+  annotations declared in `OnModelCreating` (via `HasTemporalValidity`,
+  `ShardBy*`, etc.) into the `MetadataRegistry` lazily on first use. There's no
+  longer any need to *also* configure entities on `DtdeOptionsBuilder` — the EF
+  Core extension methods are sufficient.
+
+### Changed (BREAKING)
+
+- **Single canonical DI entry**: `services.AddDtdeDbContext<TContext>(db, dtde)`
+  is now the only public way to register DTDE.
+- **Single canonical entity-configuration site**: `OnModelCreating`. The
+  `DtdeOptionsBuilder.ConfigureEntity<TEntity>(...)` method has been removed
+  (see migration below).
+- **`EntityMetadataBuilder<TEntity>` is now `internal`.** It was an
+  implementation detail of the now-removed `ConfigureEntity` path.
+- **`UseDtde` simplified to one overload**: `UseDtde(Action<DtdeOptionsBuilder>)`.
+  The no-arg overload and the `UseDtde(DtdeOptions)` overload have been removed.
+- **Shard registration tightened**: `DtdeOptionsBuilder.AddShard(IShardMetadata)`
+  and `AddShards(IEnumerable<IShardMetadata>)` removed. Use the new shorthand
+  overloads or the existing `AddShard(Action<ShardMetadataBuilder>)` for full
+  control.
+- **`ShardingBuilder<T>.AddDatabase()`** removed. Database-per-shard
+  registration moves to `dtde.AddShard(id, connectionString)` for separation
+  of concerns (entity routing in `OnModelCreating`, shard infrastructure in
+  `dtde => ...`).
+- **`ShardMetadataBuilder.Build()` validation relaxed**: table-mode shards no
+  longer require an explicit `WithTable(...)`. The table name is derived from
+  the entity's pattern at runtime.
+- **Removed `[Obsolete]` aliases** from v1.0:
+  `services.AddCrossShardTransactionSupport()`, `AddAutoCrossShardSaveChanges()`,
+  `optionsBuilder.UseAutoCrossShardSaveChanges()`. Use
+  `services.AddDtdeDbContext<T>(...)` (which wires transparent sharding by default).
+- **`AddDtde(...)` and `AddDtde<TContext>(...)` on `IServiceCollection`** are
+  now `internal`. They were lower-level building blocks; `AddDtdeDbContext`
+  composes them.
+
+### Migrating from 1.0.0
+
+```diff
+- // v1.0
+- builder.Services.AddDbContext<AppDbContext>(opts =>
+- {
+-     opts.UseSqlite(cs);
+-     opts.UseDtde(dtde =>
+-     {
+-         dtde.ConfigureEntity<Contract>(e => e.HasTemporalValidity(
+-             validFrom: nameof(Contract.ValidFrom),
+-             validTo: nameof(Contract.ValidTo)));
+-         dtde.AddShard(s => s.WithId("EU").WithShardKeyValue("EU").WithTier(ShardTier.Hot));
+-         dtde.AddShard(s => s.WithId("US").WithShardKeyValue("US").WithTier(ShardTier.Hot));
+-     });
+- });
+
++ // v2.0
++ builder.Services.AddDtdeDbContext<AppDbContext>(
++     db => db.UseSqlite(cs),
++     dtde => dtde.AddShards("EU", "US"));
++
++ // ...and move HasTemporalValidity to AppDbContext.OnModelCreating:
++ modelBuilder.Entity<Contract>()
++     .HasTemporalValidity(c => c.ValidFrom, c => c.ValidTo);
+```
+
+For shard tiers, read-only flags, custom shard names, etc., the full
+`AddShard(s => s.WithId(...).WithTier(...).AsReadOnly())` form is unchanged.
+
+### Earlier polish (also unreleased)
+
+The configuration cleanup above lands on top of an internal polish pass that
+also hasn't been published to NuGet yet:
+
+#### Added
 
 - **Production-grade NuGet packaging**
   - `Microsoft.CodeAnalysis.PublicApiAnalyzers` wired up with empty

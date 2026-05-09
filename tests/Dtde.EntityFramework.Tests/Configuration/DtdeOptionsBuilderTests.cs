@@ -1,3 +1,6 @@
+using System.Reflection;
+
+using Dtde.Abstractions.Metadata;
 using Dtde.Core.Metadata;
 using Dtde.EntityFramework.Configuration;
 
@@ -5,42 +8,47 @@ namespace Dtde.EntityFramework.Tests.Configuration;
 
 public class DtdeOptionsBuilderTests
 {
-    [Fact(DisplayName = "ConfigureEntity registers entity metadata in registry")]
-    public void ConfigureEntity_RegistersEntityMetadata_InRegistry()
+    [Fact(DisplayName = "AddShard(string) adds a table-mode shard with id-as-key")]
+    public void AddShardString_AddsTableModeShard_WithIdAsKey()
     {
         var builder = new DtdeOptionsBuilder();
 
-        builder.ConfigureEntity<TestEntity>(entity =>
-        {
-            entity.HasTemporalValidity(
-                validFrom: nameof(TestEntity.ValidFrom),
-                validTo: nameof(TestEntity.ValidTo));
-        });
-
-        var options = GetBuiltOptions(builder);
-
-        var metadata = options.MetadataRegistry.GetEntityMetadata<TestEntity>();
-        Assert.NotNull(metadata);
-        Assert.NotNull(metadata!.TemporalConfiguration);
-        Assert.Equal("ValidFrom", metadata.TemporalConfiguration!.ValidFromProperty.PropertyName);
-        Assert.Equal("ValidTo", metadata.TemporalConfiguration!.ValidToProperty!.PropertyName);
-    }
-
-    [Fact(DisplayName = "AddShard adds shard metadata to options")]
-    public void AddShard_AddsShardMetadata_ToOptions()
-    {
-        var builder = new DtdeOptionsBuilder();
-        var shard = new ShardMetadataBuilder()
-            .WithId("shard-1")
-            .WithName("Test Shard")
-            .WithConnectionString("Server=test;Database=TestDb")
-            .Build();
-
-        builder.AddShard(shard);
+        builder.AddShard("EU");
         var options = GetBuiltOptions(builder);
 
         Assert.Single(options.Shards);
-        Assert.Equal("shard-1", options.Shards.First().ShardId);
+        var shard = options.Shards.First();
+        Assert.Equal("EU", shard.ShardId);
+        Assert.Equal("EU", shard.ShardKeyValue);
+        Assert.Equal(ShardStorageMode.Tables, shard.StorageMode);
+    }
+
+    [Fact(DisplayName = "AddShard(string, connectionString) adds a database-mode shard")]
+    public void AddShardWithConnectionString_AddsDatabaseModeShard()
+    {
+        var builder = new DtdeOptionsBuilder();
+
+        builder.AddShard("EU", "Server=eu-db;Database=Customers;");
+        var options = GetBuiltOptions(builder);
+
+        var shard = options.Shards.First();
+        Assert.Equal("EU", shard.ShardId);
+        Assert.Equal("Server=eu-db;Database=Customers;", shard.ConnectionString);
+        Assert.Equal(ShardStorageMode.Databases, shard.StorageMode);
+    }
+
+    [Fact(DisplayName = "AddShards(params) adds multiple table-mode shards")]
+    public void AddShardsParams_AddsMultipleTableModeShards()
+    {
+        var builder = new DtdeOptionsBuilder();
+
+        builder.AddShards("EU", "US", "APAC");
+        var options = GetBuiltOptions(builder);
+
+        Assert.Equal(3, options.Shards.Count);
+        Assert.Contains(options.Shards, s => s.ShardId == "EU");
+        Assert.Contains(options.Shards, s => s.ShardId == "US");
+        Assert.Contains(options.Shards, s => s.ShardId == "APAC");
     }
 
     [Fact(DisplayName = "AddShard with configure action creates and adds shard")]
@@ -121,23 +129,6 @@ public class DtdeOptionsBuilderTests
         Assert.Equal(expectedDate, options.DefaultTemporalContextProvider!());
     }
 
-    [Fact(DisplayName = "AddShards adds multiple shards at once")]
-    public void AddShards_AddsMultipleShards_AtOnce()
-    {
-        var builder = new DtdeOptionsBuilder();
-        var shards = new[]
-        {
-            new ShardMetadataBuilder().WithId("s1").WithConnectionString("cs1").Build(),
-            new ShardMetadataBuilder().WithId("s2").WithConnectionString("cs2").Build(),
-            new ShardMetadataBuilder().WithId("s3").WithConnectionString("cs3").Build()
-        };
-
-        builder.AddShards(shards);
-        var options = GetBuiltOptions(builder);
-
-        Assert.Equal(3, options.Shards.Count);
-    }
-
     [Fact(DisplayName = "Builder fluent API allows method chaining")]
     public void Builder_FluentApi_AllowsMethodChaining()
     {
@@ -145,25 +136,20 @@ public class DtdeOptionsBuilderTests
             .EnableDiagnostics()
             .EnableTestMode()
             .SetMaxParallelShards(20)
-            .AddShard(s => s.WithId("test").WithConnectionString("cs"))
-            .ConfigureEntity<TestEntity>(e => e.HasTemporalValidity("ValidFrom", "ValidTo"));
+            .AddShards("EU", "US");
 
         var options = GetBuiltOptions(builder);
 
         Assert.True(options.EnableDiagnostics);
         Assert.True(options.EnableTestMode);
         Assert.Equal(20, options.MaxParallelShards);
-        Assert.Single(options.Shards);
-        Assert.NotNull(options.MetadataRegistry.GetEntityMetadata<TestEntity>());
+        Assert.Equal(2, options.Shards.Count);
     }
 
-    /// <summary>
-    /// Helper to access the internal Build method via reflection.
-    /// </summary>
     private static DtdeOptions GetBuiltOptions(DtdeOptionsBuilder builder)
     {
         var buildMethod = typeof(DtdeOptionsBuilder)
-            .GetMethod("Build", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            .GetMethod("Build", BindingFlags.NonPublic | BindingFlags.Instance);
         return (DtdeOptions)buildMethod!.Invoke(builder, null)!;
     }
 }

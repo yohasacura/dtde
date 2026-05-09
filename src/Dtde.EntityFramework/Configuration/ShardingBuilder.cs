@@ -63,30 +63,6 @@ public sealed class ShardingBuilder<TEntity>
     }
 
     /// <summary>
-    /// Adds a database shard for database-mode sharding.
-    /// Calling this implicitly switches the storage mode to <see cref="ShardStorageMode.Databases"/>.
-    /// </summary>
-    /// <param name="shardKey">The shard key value the database is responsible for.</param>
-    /// <param name="connectionString">The connection string for that shard's database.</param>
-    /// <returns>The builder for chaining.</returns>
-    public ShardingBuilder<TEntity> AddDatabase(string shardKey, string connectionString)
-    {
-        ArgumentNullException.ThrowIfNull(shardKey);
-        ArgumentNullException.ThrowIfNull(connectionString);
-
-        var databases = _builder.Metadata.FindAnnotation(DtdeAnnotationNames.ShardDatabases)?.Value
-            as Dictionary<string, string>
-            ?? new Dictionary<string, string>(StringComparer.Ordinal);
-
-        databases[shardKey] = connectionString;
-
-        _builder.Metadata.SetAnnotation(DtdeAnnotationNames.ShardDatabases, databases);
-        _builder.Metadata.SetAnnotation(DtdeAnnotationNames.StorageMode, ShardStorageMode.Databases);
-
-        return this;
-    }
-
-    /// <summary>
     /// Returns the underlying <see cref="EntityTypeBuilder{TEntity}"/>.
     /// </summary>
     public EntityTypeBuilder<TEntity> ToEntityTypeBuilder() => _builder;
