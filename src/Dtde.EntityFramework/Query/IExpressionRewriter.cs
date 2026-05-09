@@ -12,12 +12,12 @@ public interface IExpressionRewriter
     /// </summary>
     /// <param name="expression">The original expression.</param>
     /// <returns>The rewritten expression with predicates injected.</returns>
-    Expression Rewrite(Expression expression);
+    public Expression Rewrite(Expression expression);
 
     /// <summary>
     /// Determines if the expression contains DTDE-specific method calls.
     /// </summary>
     /// <param name="expression">The expression to check.</param>
     /// <returns>True if the expression contains DTDE method calls.</returns>
-    bool ContainsDtdeMethods(Expression expression);
+    public bool ContainsDtdeMethods(Expression expression);
 }
