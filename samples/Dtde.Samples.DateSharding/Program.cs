@@ -21,17 +21,11 @@ builder.Services.AddOpenApi();
 // ============================================================================
 
 builder.Services.AddDtdeDbContext<DateShardingDbContext>(
-    dbOptions =>
-    {
-        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-            ?? "Data Source=date_sharding.db";
-        dbOptions.UseSqlite(connectionString);
-    },
-    dtdeOptions =>
-    {
-        // Sharding is configured in DbContext.OnModelCreating using fluent API
-        // No additional builder configuration needed for basic scenarios
-    });
+    (db, conn) => db.UseSqlite(
+        conn
+            ?? builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? "Data Source=date_sharding.db"),
+    dtde => dtde.AddShards("2023", "2024", "2025"));
 
 var app = builder.Build();
 
@@ -39,7 +33,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<DateShardingDbContext>();
-    context.Database.EnsureCreated();
+    await context.EnsureAllShardsCreatedAsync();
 }
 
 if (app.Environment.IsDevelopment())

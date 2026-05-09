@@ -23,8 +23,9 @@ builder.Services.AddOpenApi();
 // ============================================================================
 
 builder.Services.AddDtdeDbContext<RegionShardingDbContext>(
-    db => db.UseSqlite(
-        builder.Configuration.GetConnectionString("DefaultConnection")
+    (db, conn) => db.UseSqlite(
+        conn
+            ?? builder.Configuration.GetConnectionString("DefaultConnection")
             ?? "Data Source=region_sharding.db"),
     dtde => dtde.AddShards("EU", "US", "APAC"));
 
@@ -34,7 +35,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<RegionShardingDbContext>();
-    context.Database.EnsureCreated();
+    await context.EnsureAllShardsCreatedAsync();
 }
 
 // Configure pipeline

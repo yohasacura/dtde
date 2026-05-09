@@ -212,39 +212,18 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
     }
 
     /// <summary>
-    /// Builds the appropriate query source for a shard based on its storage mode.
+    /// Returns the per-shard <see cref="DbSet{TEntity}"/>. The DbContext was
+    /// produced by <see cref="PerShardContextFactory{TContext}"/>, which tagged
+    /// it with the shard's id; <see cref="Infrastructure.DtdeShardModelCustomizer"/>
+    /// then rewrote the entity's table name for that shard — so
+    /// <c>context.Set&lt;TEntity&gt;()</c> already maps to <c>Customers_EU</c>
+    /// (or whatever the shard's table-name pattern resolved to).
     /// </summary>
-    private IQueryable<TEntity> BuildShardQuery<TEntity>(DbContext context, IShardMetadata shard)
+    private static IQueryable<TEntity> BuildShardQuery<TEntity>(DbContext context, IShardMetadata shard)
         where TEntity : class
     {
-        var dbSet = context.Set<TEntity>();
-
-        // For table-level sharding, we need to redirect to the correct table
-        // This is achieved through raw SQL or by configuring the model at runtime
-        if (shard.StorageMode is ShardStorageMode.Tables or ShardStorageMode.Manual
-            && !string.IsNullOrEmpty(shard.TableName))
-        {
-            // Use FromSqlRaw to query specific table
-            // Note: In production, this should use proper model configuration per table
-            var tableName = FormatTableName(shard.SchemaName, shard.TableName);
-            LogMessages.QueryingTable(_logger, tableName, shard.ShardId);
-
-            // Return the DbSet as queryable - table name resolution handled elsewhere
-            // For full implementation, use model builder per-shard or raw SQL
-            return dbSet.AsQueryable();
-        }
-
-        return dbSet.AsQueryable();
-    }
-
-    /// <summary>
-    /// Formats a fully qualified table name with optional schema.
-    /// </summary>
-    private static string FormatTableName(string? schemaName, string tableName)
-    {
-        return string.IsNullOrEmpty(schemaName)
-            ? $"[{tableName}]"
-            : $"[{schemaName}].[{tableName}]";
+        _ = shard;
+        return context.Set<TEntity>().AsQueryable();
     }
 
     /// <summary>

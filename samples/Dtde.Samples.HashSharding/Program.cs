@@ -9,17 +9,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// Configure DTDE with hash-based sharding
+// Configure DTDE with hash-based sharding (8 logical shards over a single SQLite DB).
 builder.Services.AddDtdeDbContext<HashShardingDbContext>(
-    dbOptions =>
-    {
-        dbOptions.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
-    },
-    dtdeOptions =>
-    {
-        // Sharding is configured via fluent API in DbContext.OnModelCreating
-        // The ShardByHash() calls define hash-based sharding for each entity
-    });
+    (db, conn) => db.UseSqlite(
+        conn
+            ?? builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? "Data Source=hash_sharding.db"),
+    dtde => dtde.AddShards("0", "1", "2", "3", "4", "5", "6", "7"));
 
 var app = builder.Build();
 
@@ -36,7 +32,7 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<HashShardingDbContext>();
-    context.Database.EnsureCreated();
+    await context.EnsureAllShardsCreatedAsync();
 }
 
 app.Run();
