@@ -278,26 +278,34 @@ public sealed class ShardMetadataBuilder
     }
 
     /// <summary>
-    /// Builds the ShardMetadata instance.
+    /// Builds the <see cref="ShardMetadata"/> instance.
     /// </summary>
-    /// <returns>The constructed ShardMetadata.</returns>
+    /// <returns>The constructed metadata.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when required state is missing: <see cref="WithId(string)"/> must
+    /// always be called; database-mode shards must have a connection string;
+    /// manual-mode shards must specify the table they map to. Auto-routed
+    /// table-mode shards do not require an explicit table name — DTDE derives
+    /// it at query time from the entity's table-name pattern.
+    /// </exception>
     public ShardMetadata Build()
     {
         if (string.IsNullOrWhiteSpace(_shardId))
         {
-            throw new InvalidOperationException("ShardId is required.");
+            throw new InvalidOperationException("ShardId is required. Call WithId(...).");
         }
 
-        // Validate based on storage mode
         if (_storageMode == ShardStorageMode.Databases && string.IsNullOrWhiteSpace(_connectionString))
         {
-            throw new InvalidOperationException("ConnectionString is required for database sharding.");
+            throw new InvalidOperationException(
+                $"ConnectionString is required for database-mode shard '{_shardId}'. " +
+                "Call WithConnectionString(...) or use the AddShard(id, connectionString) shorthand.");
         }
 
-        if ((_storageMode == ShardStorageMode.Tables || _storageMode == ShardStorageMode.Manual)
-            && string.IsNullOrWhiteSpace(_tableName))
+        if (_storageMode == ShardStorageMode.Manual && string.IsNullOrWhiteSpace(_tableName))
         {
-            throw new InvalidOperationException("TableName is required for table-based sharding.");
+            throw new InvalidOperationException(
+                $"TableName is required for manual shard '{_shardId}'. Call WithTable(...).");
         }
 
         var name = string.IsNullOrWhiteSpace(_name) ? _shardId : _name;

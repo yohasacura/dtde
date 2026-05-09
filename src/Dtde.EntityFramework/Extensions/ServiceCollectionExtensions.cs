@@ -15,17 +15,101 @@ using Microsoft.Extensions.Logging;
 namespace Dtde.EntityFramework.Extensions;
 
 /// <summary>
-/// Extension methods for IServiceCollection to register DTDE services.
+/// Single canonical DI entry point for DTDE:
+/// <see cref="AddDtdeDbContext{TContext}(IServiceCollection, Action{DbContextOptionsBuilder}, Action{DtdeOptionsBuilder})"/>.
 /// </summary>
+/// <remarks>
+/// Application code should use that one-call helper for nearly all setups. The lower-level helpers (<c>AddDtde</c>,
+/// <c>UseTransparentSharding</c>, etc.) are internal implementation details.
+/// </remarks>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds DTDE services to the service collection.
+    /// Registers a DTDE-aware <see cref="DbContext"/> with the DI container.
+    /// Cross-shard transparency (automatic 2PC across shards in
+    /// <c>SaveChangesAsync</c>) is enabled by default.
     /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureOptions">The action to configure DTDE options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddDtde(
+    /// <typeparam name="TContext">The application's <see cref="DtdeDbContext"/> subclass.</typeparam>
+    /// <param name="services">The DI container.</param>
+    /// <param name="configureDbContext">Configures the underlying EF Core options (e.g. <c>UseSqlite</c>, <c>UseSqlServer</c>).</param>
+    /// <param name="configureDtde">Configures DTDE: shards, defaults, diagnostics.</param>
+    /// <returns>The same <see cref="IServiceCollection"/> for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// builder.Services.AddDtdeDbContext&lt;AppDbContext&gt;(
+    ///     db => db.UseSqlite("Data Source=app.db"),
+    ///     dtde => dtde.AddShards("EU", "US", "APAC"));
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddDtdeDbContext<TContext>(
+        this IServiceCollection services,
+        Action<DbContextOptionsBuilder> configureDbContext,
+        Action<DtdeOptionsBuilder> configureDtde)
+        where TContext : DtdeDbContext
+        => services.AddDtdeDbContext<TContext>(
+            configureDbContext,
+            configureDtde,
+            enableTransparentSharding: true);
+
+    /// <summary>
+    /// Registers a DTDE-aware <see cref="DbContext"/> with the option to
+    /// disable transparent cross-shard transaction handling. Use the simpler
+    /// overload unless you specifically need to opt out of 2PC interception.
+    /// </summary>
+    /// <typeparam name="TContext">The application's <see cref="DtdeDbContext"/> subclass.</typeparam>
+    /// <param name="services">The DI container.</param>
+    /// <param name="configureDbContext">Configures the underlying EF Core options.</param>
+    /// <param name="configureDtde">Configures DTDE.</param>
+    /// <param name="enableTransparentSharding">
+    /// When <see langword="true"/> (recommended), <see cref="DbContext.SaveChangesAsync(System.Threading.CancellationToken)"/>
+    /// transparently fans out and coordinates writes that span multiple shards.
+    /// </param>
+    /// <returns>The same <see cref="IServiceCollection"/> for chaining.</returns>
+    public static IServiceCollection AddDtdeDbContext<TContext>(
+        this IServiceCollection services,
+        Action<DbContextOptionsBuilder> configureDbContext,
+        Action<DtdeOptionsBuilder> configureDtde,
+        bool enableTransparentSharding)
+        where TContext : DtdeDbContext
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configureDbContext);
+        ArgumentNullException.ThrowIfNull(configureDtde);
+
+        services.AddDtdeCore(configureDtde);
+        services.AddScoped<IShardContextFactory, NullShardContextFactory<TContext>>();
+
+        if (enableTransparentSharding)
+        {
+            services.AddTransparentShardingSupport();
+        }
+
+        services.AddDbContext<TContext>((sp, options) =>
+        {
+            configureDbContext(options);
+
+            var dtdeOptions = sp.GetRequiredService<DtdeOptions>();
+            options.UseDtdeOptions(dtdeOptions);
+
+            if (enableTransparentSharding)
+            {
+                options.UseTransparentSharding(sp);
+            }
+        });
+
+        return services;
+    }
+
+    // ------------------------------------------------------------------
+    //  Internal infrastructure (composable via UseDtde extension)
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Registers DTDE's core services (registries, query/update services). Public so the
+    /// <c>UseDtde(Action&lt;DtdeOptionsBuilder&gt;)</c> extension can call into it; not
+    /// intended for application code.
+    /// </summary>
+    internal static IServiceCollection AddDtdeCore(
         this IServiceCollection services,
         Action<DtdeOptionsBuilder> configureOptions)
     {
@@ -36,35 +120,14 @@ public static class ServiceCollectionExtensions
         configureOptions(builder);
         var options = builder.Build();
 
-        return services.AddDtde(options);
-    }
-
-    /// <summary>
-    /// Adds DTDE services to the service collection with pre-built options.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="options">The DTDE options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddDtde(
-        this IServiceCollection services,
-        DtdeOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(options);
-
-        // Register options
         services.AddSingleton(options);
-
-        // Register core services
         services.AddSingleton<IMetadataRegistry>(options.MetadataRegistry);
         services.AddSingleton<IShardRegistry>(options.ShardRegistry);
         services.AddSingleton<ITemporalContext>(options.TemporalContext);
 
-        // Register query services
         services.AddScoped<IExpressionRewriter, DtdeExpressionRewriter>();
         services.AddScoped<IShardedQueryExecutor, ShardedQueryExecutor>();
 
-        // Register update services
         services.AddScoped<IDtdeUpdateProcessor, DtdeUpdateProcessor>();
         services.AddScoped<VersionManager>();
         services.AddScoped<ShardWriteRouter>();
@@ -72,133 +135,10 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>
-    /// Adds DTDE services with a typed shard context factory.
-    /// </summary>
-    /// <typeparam name="TContext">The DbContext type.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureOptions">The action to configure DTDE options.</param>
-    /// <param name="contextFactory">The factory function to create context instances.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddDtde<TContext>(
-        this IServiceCollection services,
-        Action<DtdeOptionsBuilder> configureOptions,
-        Func<DbContextOptions<TContext>, TContext> contextFactory) where TContext : DbContext
-    {
-        services.AddDtde(configureOptions);
-        services.AddScoped<IShardContextFactory>(sp =>
-            new ShardContextFactory<TContext>(
-                sp.GetRequiredService<IShardRegistry>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ShardContextFactory<TContext>>>(),
-                contextFactory));
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds DTDE DbContext to the service collection with transparent sharding enabled by default.
-    /// </summary>
-    /// <typeparam name="TContext">The DbContext type.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureDbContext">The action to configure the DbContext.</param>
-    /// <param name="configureDtde">The action to configure DTDE.</param>
-    /// <returns>The service collection for chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method enables fully transparent sharding. Use regular EF Core patterns
-    /// and sharding is handled automatically:
-    /// </para>
-    /// <code>
-    /// // All these patterns work transparently with sharding:
-    ///
-    /// // Simple SaveChanges
-    /// context.Add(entity1);
-    /// context.Add(entity2);
-    /// await context.SaveChangesAsync(); // Auto cross-shard if needed
-    ///
-    /// // Explicit transactions
-    /// using var transaction = await context.Database.BeginTransactionAsync();
-    /// context.Add(entity1);
-    /// await context.SaveChangesAsync();
-    /// context.Update(entity2);
-    /// await context.SaveChangesAsync();
-    /// await transaction.CommitAsync(); // 2PC across all touched shards
-    /// </code>
-    /// </remarks>
-    public static IServiceCollection AddDtdeDbContext<TContext>(
-        this IServiceCollection services,
-        Action<DbContextOptionsBuilder> configureDbContext,
-        Action<DtdeOptionsBuilder> configureDtde) where TContext : DtdeDbContext
-    {
-        return services.AddDtdeDbContext<TContext>(
-            configureDbContext,
-            configureDtde,
-            enableTransparentSharding: true);
-    }
-
-    /// <summary>
-    /// Adds DTDE DbContext to the service collection with configurable transparent sharding.
-    /// </summary>
-    /// <typeparam name="TContext">The DbContext type.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureDbContext">The action to configure the DbContext.</param>
-    /// <param name="configureDtde">The action to configure DTDE.</param>
-    /// <param name="enableTransparentSharding">
-    /// When true (default), sharding is completely transparent. Standard EF Core patterns
-    /// work automatically with cross-shard transaction support.
-    /// </param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddDtdeDbContext<TContext>(
-        this IServiceCollection services,
-        Action<DbContextOptionsBuilder> configureDbContext,
-        Action<DtdeOptionsBuilder> configureDtde,
-        bool enableTransparentSharding) where TContext : DtdeDbContext
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configureDbContext);
-        ArgumentNullException.ThrowIfNull(configureDtde);
-
-        // Add DTDE services
-        services.AddDtde(configureDtde);
-
-        // Add shard context factory for cross-shard operations
-        services.AddScoped<IShardContextFactory, NullShardContextFactory<TContext>>();
-
-        // Add cross-shard transaction support
-        if (enableTransparentSharding)
-        {
-            services.AddTransparentShardingSupport();
-        }
-
-        // Add DbContext
-        services.AddDbContext<TContext>((sp, options) =>
-        {
-            configureDbContext(options);
-
-            var dtdeOptions = sp.GetRequiredService<DtdeOptions>();
-            options.UseDtde(dtdeOptions);
-
-            // Add the transparent sharding interceptor
-            if (enableTransparentSharding)
-            {
-                options.UseTransparentSharding(sp);
-            }
-        });
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds transparent sharding support to the service collection.
-    /// This enables automatic cross-shard transaction coordination.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddTransparentShardingSupport(this IServiceCollection services)
+    internal static IServiceCollection AddTransparentShardingSupport(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Register the cross-shard coordinator
         services.AddScoped<ICrossShardTransactionCoordinator>(sp =>
         {
             var shardRegistry = sp.GetRequiredService<IShardRegistry>();
@@ -213,19 +153,12 @@ public static class ServiceCollectionExtensions
                 transactionLogger);
         });
 
-        // Register the transparent sharding interceptor
         services.TryAddSingleton<TransparentShardingInterceptor>();
 
         return services;
     }
 
-    /// <summary>
-    /// Adds transparent sharding to DbContext options.
-    /// </summary>
-    /// <param name="optionsBuilder">The DbContext options builder.</param>
-    /// <param name="serviceProvider">The service provider.</param>
-    /// <returns>The options builder for chaining.</returns>
-    public static DbContextOptionsBuilder UseTransparentSharding(
+    internal static DbContextOptionsBuilder UseTransparentSharding(
         this DbContextOptionsBuilder optionsBuilder,
         IServiceProvider serviceProvider)
     {
@@ -240,71 +173,4 @@ public static class ServiceCollectionExtensions
 
         return optionsBuilder;
     }
-
-    #region Legacy/Deprecated Methods
-
-    /// <summary>
-    /// Adds cross-shard transaction support to the service collection.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    /// <remarks>
-    /// This method is provided for backward compatibility. For new code,
-    /// use <see cref="AddTransparentShardingSupport"/> instead.
-    /// </remarks>
-    [Obsolete("Use AddTransparentShardingSupport() instead. This method is provided for backward compatibility.")]
-    public static IServiceCollection AddCrossShardTransactionSupport(this IServiceCollection services)
-    {
-        return services.AddTransparentShardingSupport();
-    }
-
-    /// <summary>
-    /// Adds cross-shard transaction support with custom options.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureDefaultOptions">Action to configure default transaction options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    [Obsolete("Use AddTransparentShardingSupport() instead. This method is provided for backward compatibility.")]
-    public static IServiceCollection AddCrossShardTransactionSupport(
-        this IServiceCollection services,
-        Action<CrossShardTransactionOptions> configureDefaultOptions)
-    {
-        ArgumentNullException.ThrowIfNull(configureDefaultOptions);
-
-        var options = new CrossShardTransactionOptions();
-        configureDefaultOptions(options);
-
-        CrossShardTransactionOptions.DefaultTimeout = options.Timeout;
-        CrossShardTransactionOptions.DefaultIsolationLevel = options.IsolationLevel;
-
-        return services.AddTransparentShardingSupport();
-    }
-
-    /// <summary>
-    /// Adds automatic cross-shard transaction handling for SaveChanges operations.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    [Obsolete("Use AddTransparentShardingSupport() instead. This method is provided for backward compatibility.")]
-    public static IServiceCollection AddAutoCrossShardSaveChanges(this IServiceCollection services)
-    {
-        services.TryAddSingleton<ShardAwareSaveChangesInterceptor>();
-        return services;
-    }
-
-    /// <summary>
-    /// Adds automatic cross-shard transaction handling to DbContext options.
-    /// </summary>
-    /// <param name="optionsBuilder">The DbContext options builder.</param>
-    /// <param name="serviceProvider">The service provider to resolve the interceptor from.</param>
-    /// <returns>The options builder for chaining.</returns>
-    [Obsolete("Use UseTransparentSharding() instead. This method is provided for backward compatibility.")]
-    public static DbContextOptionsBuilder UseAutoCrossShardSaveChanges(
-        this DbContextOptionsBuilder optionsBuilder,
-        IServiceProvider serviceProvider)
-    {
-        return optionsBuilder.UseTransparentSharding(serviceProvider);
-    }
-
-    #endregion
 }

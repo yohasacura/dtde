@@ -1,5 +1,7 @@
 using Dtde.Abstractions.Metadata;
 using Dtde.Abstractions.Temporal;
+using Dtde.Core.Metadata;
+using Dtde.Core.Temporal;
 using Dtde.EntityFramework.Configuration;
 using Dtde.EntityFramework.Infrastructure;
 using Dtde.EntityFramework.Query;
@@ -7,6 +9,7 @@ using Dtde.EntityFramework.Update;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Dtde.EntityFramework;
 
@@ -19,6 +22,8 @@ public abstract class DtdeDbContext : DbContext
     private IMetadataRegistry? _metadataRegistry;
     private IShardRegistry? _shardRegistry;
     private DtdeOptions? _options;
+    private bool _registryBackfilled;
+    private bool _modelCreating;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DtdeDbContext"/> class.
@@ -41,9 +46,107 @@ public abstract class DtdeDbContext : DbContext
     public ITemporalContext TemporalContext => _temporalContext ??= GetDtdeService<ITemporalContext>();
 
     /// <summary>
-    /// Gets the metadata registry.
+    /// Gets the metadata registry. The first read after model construction
+    /// also lifts any DTDE annotations declared in <c>OnModelCreating</c> into
+    /// the registry, so application code only ever has to configure entities
+    /// once (in <c>OnModelCreating</c>).
     /// </summary>
-    public IMetadataRegistry MetadataRegistry => _metadataRegistry ??= GetDtdeService<IMetadataRegistry>();
+    public IMetadataRegistry MetadataRegistry
+    {
+        get
+        {
+            _metadataRegistry ??= GetDtdeService<IMetadataRegistry>();
+            EnsureRegistryBackfilled();
+            return _metadataRegistry;
+        }
+    }
+
+    /// <summary>
+    /// Once-per-context backfill: scans the EF Core <see cref="DbContext.Model"/>
+    /// for DTDE annotations and registers a corresponding <see cref="EntityMetadata"/>
+    /// for each entity not already present in the registry. Idempotent.
+    /// </summary>
+    private void EnsureRegistryBackfilled()
+    {
+        if (_registryBackfilled
+            || _modelCreating
+            || _metadataRegistry is not MetadataRegistry concreteRegistry)
+        {
+            return;
+        }
+
+        _registryBackfilled = true;
+
+        foreach (var entityType in Model.GetEntityTypes())
+        {
+            var clrType = entityType.ClrType;
+            if (concreteRegistry.GetEntityMetadata(clrType) is not null)
+            {
+                continue;
+            }
+
+            var temporal = ReadTemporalConfiguration(entityType, clrType);
+            if (temporal is null)
+            {
+                continue;
+            }
+
+            var tableName = entityType.GetTableName() ?? clrType.Name;
+            var schemaName = entityType.GetSchema() ?? "dbo";
+            var primaryKey = ReadPrimaryKey(entityType, clrType);
+
+            concreteRegistry.RegisterEntity(new EntityMetadata(
+                clrType,
+                tableName,
+                schemaName,
+                primaryKey: primaryKey,
+                temporalConfiguration: temporal,
+                shardingConfiguration: null));
+        }
+    }
+
+    private static IPropertyMetadata? ReadPrimaryKey(IReadOnlyEntityType entityType, Type clrType)
+    {
+        var primaryKey = entityType.FindPrimaryKey();
+        if (primaryKey is null || primaryKey.Properties.Count != 1)
+        {
+            return null;
+        }
+
+        var keyName = primaryKey.Properties[0].Name;
+        var keyInfo = clrType.GetProperty(keyName);
+        return keyInfo is not null ? new PropertyMetadata(keyInfo) : null;
+    }
+
+    private static ITemporalConfiguration? ReadTemporalConfiguration(IReadOnlyEntityType entityType, Type clrType)
+    {
+        var isTemporal = entityType.FindAnnotation(DtdeAnnotationNames.IsTemporal)?.Value as bool? ?? false;
+        if (!isTemporal)
+        {
+            return null;
+        }
+
+        var validFromName = entityType.FindAnnotation(DtdeAnnotationNames.ValidFromProperty)?.Value as string;
+        if (string.IsNullOrWhiteSpace(validFromName))
+        {
+            return null;
+        }
+
+        var validFromInfo = clrType.GetProperty(validFromName);
+        if (validFromInfo is null)
+        {
+            return null;
+        }
+
+        var validToName = entityType.FindAnnotation(DtdeAnnotationNames.ValidToProperty)?.Value as string;
+        var validToInfo = !string.IsNullOrWhiteSpace(validToName)
+            ? clrType.GetProperty(validToName)
+            : null;
+
+        return new TemporalConfiguration(
+            new PropertyMetadata(validFromInfo),
+            validToInfo is not null ? new PropertyMetadata(validToInfo) : null);
+    }
 
     /// <summary>
     /// Gets the shard registry.
@@ -171,10 +274,23 @@ public abstract class DtdeDbContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
 
-        base.OnModelCreating(modelBuilder);
+        _modelCreating = true;
+        try
+        {
+            base.OnModelCreating(modelBuilder);
 
-        // Apply DTDE configurations from metadata registry
-        ApplyDtdeConfigurations(modelBuilder);
+            // Reverse direction: any entity already declared via the (advanced)
+            // registry path has its annotations applied to the model. Forward
+            // direction — lifting OnModelCreating annotations into the registry —
+            // happens lazily on first MetadataRegistry access (see
+            // EnsureRegistryBackfilled), because the user's HasTemporalValidity /
+            // ShardBy* calls happen after base.OnModelCreating returns.
+            ApplyDtdeConfigurations(modelBuilder);
+        }
+        finally
+        {
+            _modelCreating = false;
+        }
     }
 
     /// <summary>

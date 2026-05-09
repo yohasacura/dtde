@@ -65,10 +65,13 @@ public sealed class EntityMetadata : IEntityMetadata
 }
 
 /// <summary>
-/// Fluent builder for <see cref="EntityMetadata"/>. Mirrors EF Core's configuration shape.
+/// Internal fluent builder for <see cref="EntityMetadata"/>. Application code
+/// should not use this directly — entity sharding/temporal configuration belongs
+/// in <c>DbContext.OnModelCreating</c> via the <c>EntityTypeBuilder&lt;T&gt;</c>
+/// extension methods (<c>ShardBy</c>, <c>HasTemporalValidity</c>, etc.).
 /// </summary>
 /// <typeparam name="TEntity">The entity type.</typeparam>
-public sealed class EntityMetadataBuilder<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TEntity>
+internal sealed class EntityMetadataBuilder<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TEntity>
     where TEntity : class
 {
     private string _tableName;
