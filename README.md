@@ -67,19 +67,19 @@ dotnet add package Dtde.EntityFramework  # EF Core integration
 
 ## 🚀 Quick Start
 
-### 1. Define Your Entity
+### 1. Define your entity
 
 ```csharp
 public class Customer
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string Region { get; set; } = string.Empty;  // Shard key
+    public string Region { get; set; } = string.Empty;  // shard key
     public DateTime CreatedAt { get; set; }
 }
 ```
 
-### 2. Create Your DbContext
+### 2. Inherit `DtdeDbContext` and declare the shard key in `OnModelCreating`
 
 ```csharp
 public class AppDbContext : DtdeDbContext
@@ -92,42 +92,43 @@ public class AppDbContext : DtdeDbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Customer>(entity =>
-        {
-            entity.ShardBy(c => c.Region);  // Enable sharding by Region
-        });
+        modelBuilder.Entity<Customer>()
+            .ShardBy(c => c.Region);
     }
 }
 ```
 
-### 3. Configure Services
+### 3. One call in `Program.cs`
 
 ```csharp
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseSqlServer(connectionString);
-    options.UseDtde(dtde =>
-    {
-        dtde.AddShard(s => s.WithId("EU").WithShardKeyValue("EU").WithTier(ShardTier.Hot));
-        dtde.AddShard(s => s.WithId("US").WithShardKeyValue("US").WithTier(ShardTier.Hot));
-        dtde.AddShard(s => s.WithId("APAC").WithShardKeyValue("APAC").WithTier(ShardTier.Hot));
-    });
-});
+builder.Services.AddDtdeDbContext<AppDbContext>(
+    db => db.UseSqlite("Data Source=app.db"),
+    dtde => dtde.AddShards("EU", "US", "APAC"));
 ```
 
-### 4. Use It!
+That's it — three logical shards over a single SQLite connection. Need
+separate databases per shard? Swap `AddShards(...)` for one
+`AddShard("EU", euConnStr)` per region.
+
+### 4. Use standard LINQ — DTDE routes for you
 
 ```csharp
-// Queries are automatically routed to correct shard(s)
-var allCustomers = await _context.Customers.ToListAsync();  // Queries all shards
-var euCustomers = await _context.Customers
+// Insert: routed by Region
+db.Customers.Add(new Customer { Name = "Acme Corp", Region = "US" });
+await db.SaveChangesAsync();
+
+// Query without filter: fans out across all shards, merges results
+var all = await db.Customers.ToListAsync();
+
+// Query with a Where on the shard key: pruned to one shard
+var euOnly = await db.Customers
     .Where(c => c.Region == "EU")
-    .ToListAsync();  // Only queries EU shard
-
-// Inserts are automatically routed based on shard key
-_context.Customers.Add(new Customer { Name = "Acme Corp", Region = "US" });  // Routes to US shard
-await _context.SaveChangesAsync();
+    .ToListAsync();
 ```
+
+That's the entire mental model. See the
+[Getting started guide](docs/guides/getting-started.md) for date / hash
+sharding, temporal entities, and per-shard databases.
 
 ---
 
