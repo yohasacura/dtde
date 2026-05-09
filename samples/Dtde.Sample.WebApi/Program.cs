@@ -13,8 +13,9 @@ builder.Services.AddOpenApi();
 //   dtde  — declare the available shards. This sample uses a single primary
 //           shard; the temporal entities live in the same database.
 builder.Services.AddDtdeDbContext<SampleDbContext>(
-    db => db.UseSqlite(
-        builder.Configuration.GetConnectionString("DefaultConnection")
+    (db, conn) => db.UseSqlite(
+        conn
+            ?? builder.Configuration.GetConnectionString("DefaultConnection")
             ?? "Data Source=sample.db"),
     dtde => dtde.AddShard("Primary"));
 
@@ -23,7 +24,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<SampleDbContext>();
-    context.Database.EnsureCreated();
+    await context.EnsureAllShardsCreatedAsync();
 }
 
 if (app.Environment.IsDevelopment())

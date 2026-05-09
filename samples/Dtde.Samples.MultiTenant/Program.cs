@@ -16,17 +16,14 @@ builder.Services.AddOpenApi();
 // Register tenant context accessor
 builder.Services.AddScoped<ITenantContextAccessor, TenantContextAccessor>();
 
-// Configure DTDE with multi-tenant sharding
-// Sharding is configured in OnModelCreating using ShardBy(e => e.TenantId)
+// Configure DTDE with multi-tenant sharding. Each tenant gets its own
+// per-tenant table (Projects_acme, Projects_globex, ...) inside the same DB.
 builder.Services.AddDtdeDbContext<MultiTenantDbContext>(
-    dbOptions => dbOptions.UseSqlite(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? "Data Source=multitenant.db"),
-    dtdeOptions =>
-    {
-        // Sharding is configured in DbContext.OnModelCreating using fluent API
-        // No additional builder configuration needed for basic scenarios
-    });
+    (db, conn) => db.UseSqlite(
+        conn
+            ?? builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? "Data Source=multitenant.db"),
+    dtde => dtde.AddShards("acme", "globex", "initech"));
 
 var app = builder.Build();
 
@@ -47,7 +44,7 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<MultiTenantDbContext>();
-    context.Database.EnsureCreated();
+    await context.EnsureAllShardsCreatedAsync();
 
     // Seed sample tenants
     if (!context.Tenants.Any())

@@ -13,14 +13,17 @@ builder.Services.AddOpenApi();
 // Configure DTDE DbContext with combined sharding strategies
 // All sharding configuration is in CombinedDbContext.OnModelCreating()
 builder.Services.AddDtdeDbContext<CombinedDbContext>(
-    dbOptions => dbOptions.UseSqlite(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? "Data Source=combined.db"),
-    dtdeOptions =>
-    {
-        // Sharding is configured in DbContext.OnModelCreating using fluent API
-        // No additional builder configuration needed for basic scenarios
-    });
+    (db, conn) => db.UseSqlite(
+        conn
+            ?? builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? "Data Source=combined.db"),
+    dtde => dtde.AddShards(
+        // Region-sharded entities (Account, RegulatoryDocument)
+        "EU", "US", "APAC",
+        // Date-sharded entities (AccountTransaction)
+        "2024", "2025",
+        // Hash-sharded entities (ComplianceAudit) — 8 buckets
+        "h0", "h1", "h2", "h3", "h4", "h5", "h6", "h7"));
 
 var app = builder.Build();
 
@@ -37,7 +40,7 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<CombinedDbContext>();
-    context.Database.EnsureCreated();
+    await context.EnsureAllShardsCreatedAsync();
 }
 
 app.Run();
