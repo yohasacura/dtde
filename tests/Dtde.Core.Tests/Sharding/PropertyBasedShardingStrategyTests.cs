@@ -1,9 +1,11 @@
-using Dtde.Abstractions.Exceptions;
-using Dtde.Abstractions.Metadata;
-using Dtde.Core.Metadata;
-using Dtde.Core.Sharding;
 using System.Linq.Expressions;
 using System.Reflection;
+
+using Dtde.Abstractions.Exceptions;
+using Dtde.Abstractions.Metadata;
+using Dtde.Abstractions.Temporal;
+using Dtde.Core.Metadata;
+using Dtde.Core.Sharding;
 
 namespace Dtde.Core.Tests.Sharding;
 
@@ -234,8 +236,8 @@ public class PropertyBasedShardingStrategyTests
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey => null;
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding => _shardingConfig;
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration => _shardingConfig;
         public bool IsTemporal => false;
         public bool IsSharded => true;
     }

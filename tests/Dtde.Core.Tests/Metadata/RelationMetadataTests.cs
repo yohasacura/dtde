@@ -1,4 +1,5 @@
 using Dtde.Abstractions.Metadata;
+using Dtde.Abstractions.Temporal;
 using Dtde.Core.Metadata;
 
 namespace Dtde.Core.Tests.Metadata;
@@ -278,8 +279,8 @@ public class RelationMetadataTests
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey => null;
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => false;
         public bool IsSharded => false;
     }

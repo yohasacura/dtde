@@ -1,4 +1,5 @@
 using Dtde.Abstractions.Metadata;
+using Dtde.Abstractions.Temporal;
 using Dtde.Core.Metadata;
 
 namespace Dtde.Core.Tests.Metadata;
@@ -382,8 +383,8 @@ public class MetadataRegistryTests
         public string TableName { get; }
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey => null;
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => false;
         public bool IsSharded => false;
     }
@@ -400,8 +401,8 @@ public class MetadataRegistryTests
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey { get; }
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => false;
         public bool IsSharded => false;
     }
@@ -417,8 +418,8 @@ public class MetadataRegistryTests
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey => null;
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => false;
         public bool IsSharded => false;
     }
@@ -429,15 +430,15 @@ public class MetadataRegistryTests
         {
             ClrType = clrType;
             PrimaryKey = new TestPropertyMetadata("Id", typeof(int));
-            Validity = new InvalidValidityConfiguration();
+            TemporalConfiguration = new InvalidTemporalConfiguration();
         }
 
         public Type ClrType { get; }
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey { get; }
-        public IValidityConfiguration? Validity { get; }
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration { get; }
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => true;
         public bool IsSharded => false;
     }
@@ -448,15 +449,15 @@ public class MetadataRegistryTests
         {
             ClrType = clrType;
             PrimaryKey = new TestPropertyMetadata("Id", typeof(int));
-            Sharding = new InvalidShardingConfiguration();
+            ShardingConfiguration = new InvalidShardingConfiguration();
         }
 
         public Type ClrType { get; }
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey { get; }
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding { get; }
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration { get; }
         public bool IsTemporal => false;
         public bool IsSharded => true;
     }
@@ -467,15 +468,15 @@ public class MetadataRegistryTests
         {
             ClrType = clrType;
             PrimaryKey = new TestPropertyMetadata("Id", typeof(int));
-            Validity = new ValidValidityConfiguration();
+            TemporalConfiguration = new ValidTemporalConfiguration();
         }
 
         public Type ClrType { get; }
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey { get; }
-        public IValidityConfiguration? Validity { get; }
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration { get; }
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => true;
         public bool IsSharded => false;
     }
@@ -492,13 +493,13 @@ public class MetadataRegistryTests
         public string TableName => ClrType.Name;
         public string SchemaName => "dbo";
         public IPropertyMetadata? PrimaryKey { get; }
-        public IValidityConfiguration? Validity => null;
-        public IShardingConfiguration? Sharding => null;
+        public ITemporalConfiguration? TemporalConfiguration => null;
+        public IShardingConfiguration? ShardingConfiguration => null;
         public bool IsTemporal => false;
         public bool IsSharded => false;
     }
 
-    private sealed class InvalidValidityConfiguration : IValidityConfiguration
+    private sealed class InvalidTemporalConfiguration : ITemporalConfiguration
     {
         public IPropertyMetadata ValidFromProperty => null!;
         public IPropertyMetadata? ValidToProperty => null;
@@ -507,7 +508,7 @@ public class MetadataRegistryTests
         public System.Linq.Expressions.Expression<Func<TEntity, bool>> BuildPredicate<TEntity>(DateTime temporalContext) => throw new NotImplementedException();
     }
 
-    private sealed class ValidValidityConfiguration : IValidityConfiguration
+    private sealed class ValidTemporalConfiguration : ITemporalConfiguration
     {
         public IPropertyMetadata ValidFromProperty { get; } = new TestPropertyMetadata("ValidFrom", typeof(DateTime));
         public IPropertyMetadata? ValidToProperty => null;

@@ -1,5 +1,5 @@
-using Dtde.Core.Temporal;
 using Dtde.Abstractions.Temporal;
+using Dtde.Core.Temporal;
 
 namespace Dtde.Core.Tests.Temporal;
 

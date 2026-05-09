@@ -14,9 +14,9 @@ public class EntityMetadataBuilderTests
             validTo: nameof(OrderEntity.ExpirationDate));
         var metadata = builder.Build();
 
-        Assert.NotNull(metadata.Validity);
-        Assert.Equal("EffectiveDate", metadata.Validity!.ValidFromProperty.PropertyName);
-        Assert.Equal("ExpirationDate", metadata.Validity!.ValidToProperty!.PropertyName);
+        Assert.NotNull(metadata.TemporalConfiguration);
+        Assert.Equal("EffectiveDate", metadata.TemporalConfiguration!.ValidFromProperty.PropertyName);
+        Assert.Equal("ExpirationDate", metadata.TemporalConfiguration!.ValidToProperty!.PropertyName);
     }
 
     [Fact(DisplayName = "HasValidity configures validity properties by expression")]
@@ -29,9 +29,9 @@ public class EntityMetadataBuilderTests
             validToSelector: e => e.ExpirationDate);
         var metadata = builder.Build();
 
-        Assert.NotNull(metadata.Validity);
-        Assert.Equal("EffectiveDate", metadata.Validity!.ValidFromProperty.PropertyName);
-        Assert.Equal("ExpirationDate", metadata.Validity!.ValidToProperty!.PropertyName);
+        Assert.NotNull(metadata.TemporalConfiguration);
+        Assert.Equal("EffectiveDate", metadata.TemporalConfiguration!.ValidFromProperty.PropertyName);
+        Assert.Equal("ExpirationDate", metadata.TemporalConfiguration!.ValidToProperty!.PropertyName);
     }
 
     [Fact(DisplayName = "HasKey configures primary key property")]
@@ -68,7 +68,7 @@ public class EntityMetadataBuilderTests
         var metadata = builder.Build();
 
         Assert.NotNull(metadata.PrimaryKey);
-        Assert.NotNull(metadata.Validity);
+        Assert.NotNull(metadata.TemporalConfiguration);
     }
 }
 

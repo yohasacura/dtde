@@ -2,6 +2,7 @@ using Dtde.Core.Metadata;
 using Dtde.EntityFramework;
 using Dtde.EntityFramework.Configuration;
 using Dtde.EntityFramework.Extensions;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Dtde.Integration.Tests.Temporal;
