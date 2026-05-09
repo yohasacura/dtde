@@ -1,0 +1,13 @@
+M:System.String.GetHashCode();Use a stable hash for sharding (xxHash, MurmurHash, or hex-encoded SHA over UTF-8 bytes). String.GetHashCode is randomized per process and breaks shard routing across restarts.
+P:System.DateTime.Now;Use DateTime.UtcNow or a TimeProvider. Local time corrupts temporal queries when shards live in different regions.
+P:System.DateTimeOffset.Now;Use DateTimeOffset.UtcNow or a TimeProvider.
+M:System.String.Equals(System.String);Use the StringComparison overload (Ordinal/OrdinalIgnoreCase for invariant comparisons).
+M:System.String.IndexOf(System.String);Use the StringComparison overload.
+M:System.String.StartsWith(System.String);Use the StringComparison overload.
+M:System.String.EndsWith(System.String);Use the StringComparison overload.
+M:System.String.Compare(System.String,System.String);Use the StringComparison overload.
+M:System.Threading.Thread.Sleep(System.Int32);Use Task.Delay with a cancellation token.
+M:System.Threading.Thread.Sleep(System.TimeSpan);Use Task.Delay with a cancellation token.
+M:System.Threading.Tasks.Task.Wait;Await the task. Wait can deadlock when an upstream caller has captured a SynchronizationContext.
+P:System.Threading.Tasks.Task`1.Result;Await the task. Result can deadlock and obscures the original exception.
+M:System.Activator.CreateInstance(System.Type);Route reflective construction through a typed factory annotated with DynamicallyAccessedMembers, or through DI.

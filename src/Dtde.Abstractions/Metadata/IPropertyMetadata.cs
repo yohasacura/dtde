@@ -11,34 +11,34 @@ public interface IPropertyMetadata
     /// <summary>
     /// Gets the name of the property as defined in the CLR type.
     /// </summary>
-    string PropertyName { get; }
+    public string PropertyName { get; }
 
     /// <summary>
     /// Gets the CLR type of the property.
     /// </summary>
-    Type PropertyType { get; }
+    public Type PropertyType { get; }
 
     /// <summary>
     /// Gets the database column name mapped to this property.
     /// </summary>
-    string ColumnName { get; }
+    public string ColumnName { get; }
 
     /// <summary>
     /// Gets the reflection PropertyInfo for this property.
     /// </summary>
-    PropertyInfo PropertyInfo { get; }
+    public PropertyInfo PropertyInfo { get; }
 
     /// <summary>
     /// Gets the value of this property from an entity instance.
     /// </summary>
     /// <param name="entity">The entity instance to read from.</param>
     /// <returns>The property value.</returns>
-    object? GetValue(object entity);
+    public object? GetValue(object entity);
 
     /// <summary>
     /// Sets the value of this property on an entity instance.
     /// </summary>
     /// <param name="entity">The entity instance to modify.</param>
     /// <param name="value">The value to set.</param>
-    void SetValue(object entity, object? value);
+    public void SetValue(object entity, object? value);
 }

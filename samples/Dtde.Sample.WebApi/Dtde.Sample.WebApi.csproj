@@ -2,19 +2,15 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Dtde.EntityFramework\Dtde.EntityFramework.csproj" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Dtde.EntityFramework\Dtde.EntityFramework.csproj" />
-    <ProjectReference Include="..\..\src\Dtde.Core\Dtde.Core.csproj" />
-    <ProjectReference Include="..\..\src\Dtde.Abstractions\Dtde.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

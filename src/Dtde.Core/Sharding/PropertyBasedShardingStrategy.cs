@@ -36,12 +36,12 @@ public sealed class PropertyBasedShardingStrategy : IShardingStrategy
 
         var allShards = shardRegistry.GetAllShards();
 
-        if (entity.Sharding is null)
+        if (entity.ShardingConfiguration is null)
         {
             return allShards;
         }
 
-        var shardKeyProperties = entity.Sharding.ShardKeyProperties;
+        var shardKeyProperties = entity.ShardingConfiguration.ShardKeyProperties;
         if (shardKeyProperties.Count == 0)
         {
             return allShards;
@@ -78,7 +78,7 @@ public sealed class PropertyBasedShardingStrategy : IShardingStrategy
         ArgumentNullException.ThrowIfNull(shardRegistry);
         ArgumentNullException.ThrowIfNull(entityInstance);
 
-        var shardKeyProperties = entity.Sharding?.ShardKeyProperties;
+        var shardKeyProperties = entity.ShardingConfiguration?.ShardKeyProperties;
         if (shardKeyProperties is null || shardKeyProperties.Count == 0)
         {
             throw new ShardNotFoundException(

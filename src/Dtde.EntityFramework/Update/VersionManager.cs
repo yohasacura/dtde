@@ -30,7 +30,7 @@ public sealed class VersionManager
         ArgumentNullException.ThrowIfNull(source);
 
         var metadata = _metadataRegistry.GetEntityMetadata<TEntity>();
-        if (metadata?.ValidityConfiguration is null)
+        if (metadata?.TemporalConfiguration is null)
         {
             throw new InvalidOperationException(
                 $"Entity type '{typeof(TEntity).Name}' is not configured with temporal validity.");
@@ -40,10 +40,10 @@ public sealed class VersionManager
         var newVersion = CloneEntity(source, metadata);
 
         // Set ValidFrom on new version
-        metadata.ValidityConfiguration.ValidFromProperty.SetValue(newVersion, effectiveFrom);
+        metadata.TemporalConfiguration.ValidFromProperty.SetValue(newVersion, effectiveFrom);
 
         // Clear ValidTo on new version (it's currently valid)
-        metadata.ValidityConfiguration.ValidToProperty?.SetValue(newVersion, null);
+        metadata.TemporalConfiguration.ValidToProperty?.SetValue(newVersion, null);
 
         return newVersion;
     }
@@ -59,14 +59,14 @@ public sealed class VersionManager
         ArgumentNullException.ThrowIfNull(entity);
 
         var metadata = _metadataRegistry.GetEntityMetadata<TEntity>();
-        if (metadata?.ValidityConfiguration?.ValidToProperty is null)
+        if (metadata?.TemporalConfiguration?.ValidToProperty is null)
         {
             throw new InvalidOperationException(
                 $"Entity type '{typeof(TEntity).Name}' does not have a ValidTo property configured.");
         }
 
         // Ensure termination date is after or equal to ValidFrom
-        var validFrom = (DateTime)metadata.ValidityConfiguration.ValidFromProperty.GetValue(entity)!;
+        var validFrom = (DateTime)metadata.TemporalConfiguration.ValidFromProperty.GetValue(entity)!;
         if (terminationDate < validFrom)
         {
             throw new ArgumentException(
@@ -74,7 +74,7 @@ public sealed class VersionManager
                 nameof(terminationDate));
         }
 
-        metadata.ValidityConfiguration.ValidToProperty.SetValue(entity, terminationDate);
+        metadata.TemporalConfiguration.ValidToProperty.SetValue(entity, terminationDate);
     }
 
     /// <summary>
@@ -88,14 +88,14 @@ public sealed class VersionManager
         ArgumentNullException.ThrowIfNull(entity);
 
         var metadata = _metadataRegistry.GetEntityMetadata<TEntity>();
-        if (metadata?.ValidityConfiguration is null)
+        if (metadata?.TemporalConfiguration is null)
         {
             throw new InvalidOperationException(
                 $"Entity type '{typeof(TEntity).Name}' is not configured with temporal validity.");
         }
 
-        metadata.ValidityConfiguration.ValidFromProperty.SetValue(entity, effectiveFrom);
-        metadata.ValidityConfiguration.ValidToProperty?.SetValue(entity, null);
+        metadata.TemporalConfiguration.ValidFromProperty.SetValue(entity, effectiveFrom);
+        metadata.TemporalConfiguration.ValidToProperty?.SetValue(entity, null);
     }
 
     /// <summary>
@@ -125,14 +125,14 @@ public sealed class VersionManager
         ArgumentNullException.ThrowIfNull(entity);
 
         var metadata = _metadataRegistry.GetEntityMetadata<TEntity>();
-        if (metadata?.ValidityConfiguration is null)
+        if (metadata?.TemporalConfiguration is null)
         {
             throw new InvalidOperationException(
                 $"Entity type '{typeof(TEntity).Name}' is not configured with temporal validity.");
         }
 
-        var validFrom = (DateTime)metadata.ValidityConfiguration.ValidFromProperty.GetValue(entity)!;
-        var validTo = metadata.ValidityConfiguration.ValidToProperty?.GetValue(entity) as DateTime?;
+        var validFrom = (DateTime)metadata.TemporalConfiguration.ValidFromProperty.GetValue(entity)!;
+        var validTo = metadata.TemporalConfiguration.ValidToProperty?.GetValue(entity) as DateTime?;
 
         return (validFrom, validTo);
     }
@@ -150,7 +150,7 @@ public sealed class VersionManager
             }
 
             // Skip key properties - they should be handled by the database
-            if (metadata.KeyProperty?.PropertyName == property.Name)
+            if (metadata.PrimaryKey?.PropertyName == property.Name)
             {
                 continue;
             }

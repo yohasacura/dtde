@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+
 using Dtde.Abstractions.Metadata;
 using Dtde.Abstractions.Temporal;
 using Dtde.EntityFramework.Extensions;
@@ -244,26 +245,26 @@ public sealed class DtdeExpressionRewriter : ExpressionVisitor, IExpressionRewri
             predicate = null!;
 
             var metadata = _metadataRegistry.GetEntityMetadata(entityType);
-            if (metadata?.Validity is null)
+            if (metadata?.TemporalConfiguration is null)
             {
                 return false;
             }
 
             if (_asOfDate.HasValue)
             {
-                var buildPredicateMethod = typeof(IValidityConfiguration)
-                    .GetMethod(nameof(IValidityConfiguration.BuildPredicate))!
+                var buildPredicateMethod = typeof(ITemporalConfiguration)
+                    .GetMethod(nameof(ITemporalConfiguration.BuildPredicate))!
                     .MakeGenericMethod(entityType);
 
                 predicate = (LambdaExpression)buildPredicateMethod.Invoke(
-                    metadata.Validity,
+                    metadata.TemporalConfiguration,
                     [_asOfDate.Value])!;
                 return true;
             }
 
             if (_rangeStart.HasValue && _rangeEnd.HasValue)
             {
-                predicate = BuildRangePredicate(metadata.Validity, entityType);
+                predicate = BuildRangePredicate(metadata.TemporalConfiguration, entityType);
                 return true;
             }
 
@@ -271,21 +272,21 @@ public sealed class DtdeExpressionRewriter : ExpressionVisitor, IExpressionRewri
         }
 
         private LambdaExpression BuildRangePredicate(
-            IValidityConfiguration validityConfig,
+            ITemporalConfiguration temporalConfig,
             Type entityType)
         {
             var parameter = Expression.Parameter(entityType, "e");
 
             // ValidFrom <= rangeEnd AND (ValidTo IS NULL OR ValidTo >= rangeStart)
-            var validFromProperty = entityType.GetProperty(validityConfig.ValidFromProperty.PropertyName)!;
+            var validFromProperty = entityType.GetProperty(temporalConfig.ValidFromProperty.PropertyName)!;
             var validFromAccess = Expression.Property(parameter, validFromProperty);
             var rangeEndConstant = Expression.Constant(_rangeEnd!.Value);
             var validFromCheck = Expression.LessThanOrEqual(validFromAccess, rangeEndConstant);
 
             Expression validToCheck;
-            if (validityConfig.ValidToProperty is not null)
+            if (temporalConfig.ValidToProperty is not null)
             {
-                var validToProperty = entityType.GetProperty(validityConfig.ValidToProperty.PropertyName)!;
+                var validToProperty = entityType.GetProperty(temporalConfig.ValidToProperty.PropertyName)!;
                 var validToAccess = Expression.Property(parameter, validToProperty);
                 var rangeStartConstant = Expression.Constant(_rangeStart!.Value);
 

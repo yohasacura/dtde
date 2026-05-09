@@ -70,15 +70,15 @@ public sealed class DateRangeShardingStrategy : IShardingStrategy
         ArgumentNullException.ThrowIfNull(entityInstance);
 
         // Get the shard key property value
-        var shardKeyProperties = entity.Sharding?.ShardKeyProperties;
+        var shardKeyProperties = entity.ShardingConfiguration?.ShardKeyProperties;
         IPropertyMetadata shardKeyProperty;
         if (shardKeyProperties is not null && shardKeyProperties.Count > 0)
         {
             shardKeyProperty = shardKeyProperties[0];
         }
-        else if (entity.Validity?.ValidFromProperty is not null)
+        else if (entity.TemporalConfiguration?.ValidFromProperty is not null)
         {
-            shardKeyProperty = entity.Validity.ValidFromProperty;
+            shardKeyProperty = entity.TemporalConfiguration.ValidFromProperty;
         }
         else
         {
@@ -96,15 +96,8 @@ public sealed class DateRangeShardingStrategy : IShardingStrategy
 
         // Find shard containing this date
         var targetShard = shardRegistry.GetWritableShards()
-            .FirstOrDefault(s => s.DateRange?.Contains(dateValue) ?? false);
-
-        if (targetShard is null)
-        {
-            // Try to find a shard without date range (catch-all shard)
-            targetShard = shardRegistry.GetWritableShards()
+            .FirstOrDefault(s => s.DateRange?.Contains(dateValue) ?? false) ?? shardRegistry.GetWritableShards()
                 .FirstOrDefault(s => s.DateRange is null);
-        }
-
         return targetShard
             ?? throw new ShardNotFoundException(
                 $"No writable shard found for date '{dateValue:yyyy-MM-dd}' on entity '{entity.ClrType.Name}'.");
@@ -114,13 +107,13 @@ public sealed class DateRangeShardingStrategy : IShardingStrategy
         IReadOnlyDictionary<string, object?> predicates,
         IEntityMetadata entity)
     {
-        if (entity.Validity is null)
+        if (entity.TemporalConfiguration is null)
         {
             return false;
         }
 
-        var validFromName = entity.Validity.ValidFromProperty.PropertyName;
-        var validToName = entity.Validity.ValidToProperty?.PropertyName;
+        var validFromName = entity.TemporalConfiguration.ValidFromProperty.PropertyName;
+        var validToName = entity.TemporalConfiguration.ValidToProperty?.PropertyName;
 
         return predicates.ContainsKey(validFromName)
             || (validToName is not null && predicates.ContainsKey(validToName));
@@ -143,10 +136,10 @@ public sealed class DateRangeShardingStrategy : IShardingStrategy
         DateTime? start = null;
         DateTime? end = null;
 
-        if (entity.Validity is not null)
+        if (entity.TemporalConfiguration is not null)
         {
-            var validFromName = entity.Validity.ValidFromProperty.PropertyName;
-            var validToName = entity.Validity.ValidToProperty?.PropertyName;
+            var validFromName = entity.TemporalConfiguration.ValidFromProperty.PropertyName;
+            var validToName = entity.TemporalConfiguration.ValidToProperty?.PropertyName;
 
             if (predicates.TryGetValue(validFromName, out var fromValue) && fromValue is DateTime fromDate)
             {
@@ -161,9 +154,9 @@ public sealed class DateRangeShardingStrategy : IShardingStrategy
         }
 
         // Also check shard key properties
-        if (entity.Sharding is not null)
+        if (entity.ShardingConfiguration is not null)
         {
-            var dateKeyValues = entity.Sharding.ShardKeyProperties
+            var dateKeyValues = entity.ShardingConfiguration.ShardKeyProperties
                 .Select(keyProp => predicates.TryGetValue(keyProp.PropertyName, out var value) && value is DateTime dt ? dt : (DateTime?)null)
                 .Where(d => d.HasValue)
                 .Select(d => d!.Value);

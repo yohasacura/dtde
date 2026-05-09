@@ -52,30 +52,30 @@ public interface IRelationMetadata
     /// <summary>
     /// Gets the parent entity metadata.
     /// </summary>
-    IEntityMetadata ParentEntity { get; }
+    public IEntityMetadata ParentEntity { get; }
 
     /// <summary>
     /// Gets the child entity metadata.
     /// </summary>
-    IEntityMetadata ChildEntity { get; }
+    public IEntityMetadata ChildEntity { get; }
 
     /// <summary>
     /// Gets the type of relationship.
     /// </summary>
-    RelationType RelationType { get; }
+    public RelationType RelationType { get; }
 
     /// <summary>
     /// Gets the parent's key property for the relationship.
     /// </summary>
-    IPropertyMetadata ParentKey { get; }
+    public IPropertyMetadata ParentKey { get; }
 
     /// <summary>
     /// Gets the child's foreign key property.
     /// </summary>
-    IPropertyMetadata ChildForeignKey { get; }
+    public IPropertyMetadata ChildForeignKey { get; }
 
     /// <summary>
     /// Gets the temporal containment rule for this relationship.
     /// </summary>
-    TemporalContainmentRule ContainmentRule { get; }
+    public TemporalContainmentRule ContainmentRule { get; }
 }

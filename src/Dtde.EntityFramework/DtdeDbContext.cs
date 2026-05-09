@@ -4,6 +4,7 @@ using Dtde.EntityFramework.Configuration;
 using Dtde.EntityFramework.Infrastructure;
 using Dtde.EntityFramework.Query;
 using Dtde.EntityFramework.Update;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -63,12 +64,12 @@ public abstract class DtdeDbContext : DbContext
     public IQueryable<TEntity> ValidAt<TEntity>(DateTime asOfDate) where TEntity : class
     {
         var metadata = MetadataRegistry.GetEntityMetadata<TEntity>();
-        if (metadata?.ValidityConfiguration is null)
+        if (metadata?.TemporalConfiguration is null)
         {
             return Set<TEntity>().AsQueryable();
         }
 
-        var predicate = metadata.ValidityConfiguration.BuildPredicate<TEntity>(asOfDate);
+        var predicate = metadata.TemporalConfiguration.BuildPredicate<TEntity>(asOfDate);
         return Set<TEntity>().Where(predicate);
     }
 
@@ -82,13 +83,13 @@ public abstract class DtdeDbContext : DbContext
     public IQueryable<TEntity> ValidBetween<TEntity>(DateTime startDate, DateTime endDate) where TEntity : class
     {
         var metadata = MetadataRegistry.GetEntityMetadata<TEntity>();
-        if (metadata?.ValidityConfiguration is null)
+        if (metadata?.TemporalConfiguration is null)
         {
             return Set<TEntity>().AsQueryable();
         }
 
         // ValidFrom <= endDate AND (ValidTo IS NULL OR ValidTo >= startDate)
-        return BuildRangeQuery<TEntity>(metadata.ValidityConfiguration, startDate, endDate);
+        return BuildRangeQuery<TEntity>(metadata.TemporalConfiguration, startDate, endDate);
     }
 
     /// <summary>
@@ -190,29 +191,29 @@ public abstract class DtdeDbContext : DbContext
         // Get all entity metadata from the registry
         foreach (var metadata in MetadataRegistry.GetAllEntityMetadata())
         {
-            var entityBuilder = modelBuilder.Entity(metadata.EntityType);
+            var entityBuilder = modelBuilder.Entity(metadata.ClrType);
 
             // Configure key if specified
-            if (metadata.KeyProperty is not null)
+            if (metadata.PrimaryKey is not null)
             {
-                entityBuilder.HasKey(metadata.KeyProperty.PropertyName);
+                entityBuilder.HasKey(metadata.PrimaryKey.PropertyName);
             }
 
             // Add annotations for temporal configuration
-            if (metadata.ValidityConfiguration is not null)
+            if (metadata.TemporalConfiguration is not null)
             {
                 entityBuilder.HasAnnotation(
                     DtdeAnnotationNames.IsTemporal,
                     true);
                 entityBuilder.HasAnnotation(
                     DtdeAnnotationNames.ValidFromProperty,
-                    metadata.ValidityConfiguration.ValidFromProperty.PropertyName);
+                    metadata.TemporalConfiguration.ValidFromProperty.PropertyName);
 
-                if (metadata.ValidityConfiguration.ValidToProperty is not null)
+                if (metadata.TemporalConfiguration.ValidToProperty is not null)
                 {
                     entityBuilder.HasAnnotation(
                         DtdeAnnotationNames.ValidToProperty,
-                        metadata.ValidityConfiguration.ValidToProperty.PropertyName);
+                        metadata.TemporalConfiguration.ValidToProperty.PropertyName);
                 }
             }
 
@@ -238,7 +239,7 @@ public abstract class DtdeDbContext : DbContext
     }
 
     private IQueryable<TEntity> BuildRangeQuery<TEntity>(
-        IValidityConfiguration config,
+        ITemporalConfiguration config,
         DateTime startDate,
         DateTime endDate) where TEntity : class
     {
@@ -291,14 +292,8 @@ public abstract class DtdeDbContext : DbContext
     private TService GetDtdeService<TService>() where TService : class
     {
         var extension = this.GetService<IDbContextOptions>()
-            .FindExtension<DtdeOptionsExtension>();
-
-        if (extension is null)
-        {
-            throw new InvalidOperationException(
+            .FindExtension<DtdeOptionsExtension>() ?? throw new InvalidOperationException(
                 "DTDE is not configured. Call UseDtde() in your DbContext configuration.");
-        }
-
         object service = typeof(TService).Name switch
         {
             nameof(ITemporalContext) => extension.Options.TemporalContext,

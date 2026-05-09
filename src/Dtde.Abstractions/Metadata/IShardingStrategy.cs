@@ -9,7 +9,7 @@ public interface IShardingStrategy
     /// <summary>
     /// Gets the strategy type identifier.
     /// </summary>
-    ShardingStrategyType StrategyType { get; }
+    public ShardingStrategyType StrategyType { get; }
 
     /// <summary>
     /// Resolves shards that may contain data matching the given criteria.
@@ -19,7 +19,7 @@ public interface IShardingStrategy
     /// <param name="predicates">Filter predicates extracted from query (property name to value).</param>
     /// <param name="temporalContext">Optional temporal filter point.</param>
     /// <returns>Shards that should be queried, in priority order.</returns>
-    IReadOnlyList<IShardMetadata> ResolveShards(
+    public IReadOnlyList<IShardMetadata> ResolveShards(
         IEntityMetadata entity,
         IShardRegistry shardRegistry,
         IReadOnlyDictionary<string, object?> predicates,
@@ -33,7 +33,7 @@ public interface IShardingStrategy
     /// <param name="entityInstance">The entity instance being written.</param>
     /// <returns>The target shard for the write.</returns>
     /// <exception cref="Dtde.Abstractions.Exceptions.ShardNotFoundException">Thrown when no suitable shard can be found.</exception>
-    IShardMetadata ResolveWriteShard(
+    public IShardMetadata ResolveWriteShard(
         IEntityMetadata entity,
         IShardRegistry shardRegistry,
         object entityInstance);

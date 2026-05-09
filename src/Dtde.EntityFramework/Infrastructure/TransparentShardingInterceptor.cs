@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Data.Common;
+
 using Dtde.Abstractions.Metadata;
 using Dtde.Abstractions.Transactions;
 using Dtde.Core.Transactions;
@@ -11,9 +14,6 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
-using System.Collections.Concurrent;
-using System.Data.Common;
 
 namespace Dtde.EntityFramework.Infrastructure;
 

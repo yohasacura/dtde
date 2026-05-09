@@ -1,5 +1,6 @@
 using Dtde.Abstractions.Metadata;
 using Dtde.EntityFramework.Diagnostics;
+
 using Microsoft.Extensions.Logging;
 
 namespace Dtde.EntityFramework.Update;
@@ -105,9 +106,9 @@ public sealed class ShardWriteRouter
 
         // Validate date range if applicable
         var metadata = _metadataRegistry.GetEntityMetadata<TEntity>();
-        if (metadata?.ValidityConfiguration is not null && targetShard.DateRange is not null)
+        if (metadata?.TemporalConfiguration is not null && targetShard.DateRange is not null)
         {
-            var validFrom = (DateTime)metadata.ValidityConfiguration.ValidFromProperty.GetValue(entity)!;
+            var validFrom = (DateTime)metadata.TemporalConfiguration.ValidFromProperty.GetValue(entity)!;
             var dateRange = targetShard.DateRange.Value;
 
             if (validFrom < dateRange.Start || validFrom >= dateRange.End)

@@ -1,12 +1,44 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
+
 using Dtde.Abstractions.Metadata;
+using Dtde.Abstractions.Temporal;
+
+using Dtde.Core.Temporal;
 
 namespace Dtde.Core.Metadata;
 
 /// <summary>
-/// Represents metadata configuration for a temporal and/or sharded entity.
+/// Default <see cref="IEntityMetadata"/> implementation. Use
+/// <see cref="EntityMetadataBuilder{TEntity}"/> to construct instances fluently.
 /// </summary>
 public sealed class EntityMetadata : IEntityMetadata
 {
+    /// <summary>
+    /// Creates entity metadata with all configuration.
+    /// </summary>
+    /// <param name="clrType">The CLR type of the entity.</param>
+    /// <param name="tableName">The database table name.</param>
+    /// <param name="schemaName">The database schema name.</param>
+    /// <param name="primaryKey">Optional primary-key property metadata.</param>
+    /// <param name="temporalConfiguration">Optional temporal configuration.</param>
+    /// <param name="shardingConfiguration">Optional sharding configuration.</param>
+    public EntityMetadata(
+        Type clrType,
+        string tableName,
+        string schemaName,
+        IPropertyMetadata? primaryKey = null,
+        ITemporalConfiguration? temporalConfiguration = null,
+        IShardingConfiguration? shardingConfiguration = null)
+    {
+        ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
+        TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+        SchemaName = schemaName ?? throw new ArgumentNullException(nameof(schemaName));
+        PrimaryKey = primaryKey;
+        TemporalConfiguration = temporalConfiguration;
+        ShardingConfiguration = shardingConfiguration;
+    }
+
     /// <inheritdoc />
     public Type ClrType { get; }
 
@@ -20,56 +52,33 @@ public sealed class EntityMetadata : IEntityMetadata
     public IPropertyMetadata? PrimaryKey { get; }
 
     /// <inheritdoc />
-    public IValidityConfiguration? Validity { get; }
+    public ITemporalConfiguration? TemporalConfiguration { get; }
 
     /// <inheritdoc />
-    public IShardingConfiguration? Sharding { get; }
+    public IShardingConfiguration? ShardingConfiguration { get; }
 
     /// <inheritdoc />
-    public bool IsTemporal => Validity is not null;
+    public bool IsTemporal => TemporalConfiguration is not null;
 
     /// <inheritdoc />
-    public bool IsSharded => Sharding is not null;
-
-    /// <summary>
-    /// Creates entity metadata with all configuration.
-    /// </summary>
-    /// <param name="clrType">The CLR type of the entity.</param>
-    /// <param name="tableName">The database table name.</param>
-    /// <param name="schemaName">The database schema name.</param>
-    /// <param name="primaryKey">Optional primary key property metadata.</param>
-    /// <param name="validity">Optional validity configuration.</param>
-    /// <param name="sharding">Optional sharding configuration.</param>
-    public EntityMetadata(
-        Type clrType,
-        string tableName,
-        string schemaName,
-        IPropertyMetadata? primaryKey = null,
-        IValidityConfiguration? validity = null,
-        IShardingConfiguration? sharding = null)
-    {
-        ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
-        TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
-        SchemaName = schemaName ?? throw new ArgumentNullException(nameof(schemaName));
-        PrimaryKey = primaryKey;
-        Validity = validity;
-        Sharding = sharding;
-    }
+    public bool IsSharded => ShardingConfiguration is not null;
 }
 
 /// <summary>
-/// Builder for creating EntityMetadata instances.
+/// Fluent builder for <see cref="EntityMetadata"/>. Mirrors EF Core's configuration shape.
 /// </summary>
-public sealed class EntityMetadataBuilder<TEntity> where TEntity : class
+/// <typeparam name="TEntity">The entity type.</typeparam>
+public sealed class EntityMetadataBuilder<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TEntity>
+    where TEntity : class
 {
     private string _tableName;
     private string _schemaName = "dbo";
     private IPropertyMetadata? _primaryKey;
-    private IValidityConfiguration? _validity;
-    private IShardingConfiguration? _sharding;
+    private ITemporalConfiguration? _temporalConfiguration;
+    private IShardingConfiguration? _shardingConfiguration;
 
     /// <summary>
-    /// Creates a new entity metadata builder.
+    /// Creates a new builder. The table name defaults to the entity's CLR name.
     /// </summary>
     public EntityMetadataBuilder()
     {
@@ -77,107 +86,108 @@ public sealed class EntityMetadataBuilder<TEntity> where TEntity : class
     }
 
     /// <summary>
-    /// Sets the table name for the entity.
+    /// Sets the table name.
     /// </summary>
-    /// <param name="tableName">The table name.</param>
-    /// <returns>The builder for chaining.</returns>
     public EntityMetadataBuilder<TEntity> ToTable(string tableName)
     {
+        ArgumentException.ThrowIfNullOrEmpty(tableName);
+
         _tableName = tableName;
         return this;
     }
 
     /// <summary>
-    /// Sets the schema name for the entity.
+    /// Sets the schema name.
     /// </summary>
-    /// <param name="schemaName">The schema name.</param>
-    /// <returns>The builder for chaining.</returns>
     public EntityMetadataBuilder<TEntity> InSchema(string schemaName)
     {
+        ArgumentException.ThrowIfNullOrEmpty(schemaName);
+
         _schemaName = schemaName;
         return this;
     }
 
     /// <summary>
-    /// Sets the primary key property.
+    /// Sets the primary-key property by selector expression.
     /// </summary>
-    /// <param name="keySelector">Expression selecting the primary key property.</param>
-    /// <returns>The builder for chaining.</returns>
-    public EntityMetadataBuilder<TEntity> HasKey<TKey>(System.Linq.Expressions.Expression<Func<TEntity, TKey>> keySelector)
+    public EntityMetadataBuilder<TEntity> HasKey<TKey>(Expression<Func<TEntity, TKey>> keySelector)
     {
+        ArgumentNullException.ThrowIfNull(keySelector);
+
         _primaryKey = PropertyMetadata.FromExpression(keySelector);
         return this;
     }
 
     /// <summary>
-    /// Configures temporal validity with specified properties.
+    /// Configures bi-temporal validity by property selectors. Pass <see langword="null"/>
+    /// for <paramref name="validToSelector"/> to declare an open-ended entity.
     /// </summary>
-    /// <param name="validFromSelector">Expression selecting the validity start property.</param>
-    /// <param name="validToSelector">Optional expression selecting the validity end property.</param>
-    /// <returns>The builder for chaining.</returns>
     public EntityMetadataBuilder<TEntity> HasValidity(
-        System.Linq.Expressions.Expression<Func<TEntity, DateTime>> validFromSelector,
-        System.Linq.Expressions.Expression<Func<TEntity, DateTime?>>? validToSelector = null)
+        Expression<Func<TEntity, DateTime>> validFromSelector,
+        Expression<Func<TEntity, DateTime?>>? validToSelector = null)
     {
-        _validity = ValidityConfiguration.Create(validFromSelector, validToSelector);
+        ArgumentNullException.ThrowIfNull(validFromSelector);
+
+        _temporalConfiguration = TemporalConfiguration.Create(validFromSelector, validToSelector);
         return this;
     }
 
     /// <summary>
-    /// Configures temporal validity with non-nullable end date.
+    /// Configures bi-temporal validity by property selectors with a non-nullable end date.
     /// </summary>
-    /// <param name="validFromSelector">Expression selecting the validity start property.</param>
-    /// <param name="validToSelector">Expression selecting the validity end property.</param>
-    /// <returns>The builder for chaining.</returns>
     public EntityMetadataBuilder<TEntity> HasValidity(
-        System.Linq.Expressions.Expression<Func<TEntity, DateTime>> validFromSelector,
-        System.Linq.Expressions.Expression<Func<TEntity, DateTime>> validToSelector)
+        Expression<Func<TEntity, DateTime>> validFromSelector,
+        Expression<Func<TEntity, DateTime>> validToSelector)
     {
-        _validity = ValidityConfiguration.Create(validFromSelector, validToSelector);
+        ArgumentNullException.ThrowIfNull(validFromSelector);
+        ArgumentNullException.ThrowIfNull(validToSelector);
+
+        _temporalConfiguration = TemporalConfiguration.Create(validFromSelector, validToSelector);
         return this;
     }
 
     /// <summary>
-    /// Configures temporal validity with property names.
+    /// Configures bi-temporal validity by property names.
     /// </summary>
-    /// <param name="validFrom">The name of the validity start property.</param>
-    /// <param name="validTo">The name of the validity end property.</param>
-    /// <returns>The builder for chaining.</returns>
+    [RequiresUnreferencedCode("Looks up properties by name on TEntity. Annotate the calling generic with DynamicallyAccessedMembers=PublicProperties when used in trim/AOT scenarios.")]
     public EntityMetadataBuilder<TEntity> HasTemporalValidity(string validFrom, string validTo)
     {
-        _validity = ValidityConfiguration.Create<TEntity>(validFrom, validTo);
+        ArgumentException.ThrowIfNullOrEmpty(validFrom);
+        ArgumentException.ThrowIfNullOrEmpty(validTo);
+
+        _temporalConfiguration = TemporalConfiguration.Create<TEntity>(validFrom, validTo);
         return this;
     }
 
     /// <summary>
-    /// Configures temporal validity with property names (start only).
+    /// Configures open-ended bi-temporal validity by property name (start only).
     /// </summary>
-    /// <param name="validFrom">The name of the validity start property.</param>
-    /// <returns>The builder for chaining.</returns>
+    [RequiresUnreferencedCode("Looks up properties by name on TEntity. Annotate the calling generic with DynamicallyAccessedMembers=PublicProperties when used in trim/AOT scenarios.")]
     public EntityMetadataBuilder<TEntity> HasTemporalValidity(string validFrom)
     {
-        _validity = ValidityConfiguration.Create<TEntity>(validFrom, null);
+        ArgumentException.ThrowIfNullOrEmpty(validFrom);
+
+        _temporalConfiguration = TemporalConfiguration.Create<TEntity>(validFrom, null);
         return this;
     }
 
     /// <summary>
     /// Sets the sharding configuration.
     /// </summary>
-    /// <param name="sharding">The sharding configuration.</param>
-    /// <returns>The builder for chaining.</returns>
     public EntityMetadataBuilder<TEntity> WithSharding(IShardingConfiguration sharding)
     {
-        _sharding = sharding;
+        ArgumentNullException.ThrowIfNull(sharding);
+
+        _shardingConfiguration = sharding;
         return this;
     }
 
     /// <summary>
-    /// Builds the EntityMetadata instance.
+    /// Builds the <see cref="EntityMetadata"/> instance. Auto-detects the primary key
+    /// (looking for <c>Id</c> or <c>{EntityName}Id</c>) when one was not explicitly set.
     /// </summary>
-    /// <returns>The constructed EntityMetadata.</returns>
     public EntityMetadata Build()
     {
-        // Try to auto-detect primary key if not specified
         var primaryKey = _primaryKey ?? TryDetectPrimaryKey();
 
         return new EntityMetadata(
@@ -185,23 +195,19 @@ public sealed class EntityMetadataBuilder<TEntity> where TEntity : class
             _tableName,
             _schemaName,
             primaryKey,
-            _validity,
-            _sharding);
+            _temporalConfiguration,
+            _shardingConfiguration);
     }
 
     private static PropertyMetadata? TryDetectPrimaryKey()
     {
         var entityType = typeof(TEntity);
 
-        // Convention: look for "Id" or "{EntityName}Id"
         var idProperty = entityType.GetProperty("Id")
                          ?? entityType.GetProperty($"{entityType.Name}Id");
 
-        if (idProperty is not null)
-        {
-            return new PropertyMetadata(idProperty);
-        }
-
-        return null;
+        return idProperty is not null
+            ? new PropertyMetadata(idProperty)
+            : null;
     }
 }

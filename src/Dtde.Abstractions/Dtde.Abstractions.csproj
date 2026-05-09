@@ -1,15 +1,28 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <Description>DTDE Abstractions - Core interfaces and contracts for the Distributed Temporal Data Engine. Use this package to build custom implementations or extend DTDE functionality.</Description>
-    <PackageTags>temporal;sharding;entity-framework;ef-core;abstractions;interfaces;contracts</PackageTags>
+    <RootNamespace>Dtde.Abstractions</RootNamespace>
+    <AssemblyName>Dtde.Abstractions</AssemblyName>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Dtde.Abstractions</PackageId>
+    <Title>DTDE Abstractions</Title>
+    <Description>Core interfaces and contracts for the Distributed Temporal Data Engine (DTDE). Reference this package only when building custom providers or extending DTDE; application developers should reference Dtde.EntityFramework instead.</Description>
+    <PackageTags>dtde;temporal;sharding;ef-core;entity-framework;abstractions;contracts;interfaces</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dtde.Core" />
+    <InternalsVisibleTo Include="Dtde.EntityFramework" />
+    <InternalsVisibleTo Include="Dtde.Core.Tests" />
+    <InternalsVisibleTo Include="Dtde.EntityFramework.Tests" />
+    <InternalsVisibleTo Include="Dtde.Integration.Tests" />
   </ItemGroup>
 
 </Project>

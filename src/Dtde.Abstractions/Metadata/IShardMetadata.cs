@@ -114,66 +114,66 @@ public interface IShardMetadata
     /// Gets the unique shard identifier.
     /// </summary>
     /// <example>Orders_2024, Customers_EU, Shard_003</example>
-    string ShardId { get; }
+    public string ShardId { get; }
 
     /// <summary>
     /// Gets the display name for logging and diagnostics.
     /// </summary>
-    string Name { get; }
+    public string Name { get; }
 
     /// <summary>
     /// Gets the storage mode for this shard.
     /// </summary>
-    ShardStorageMode StorageMode { get; }
+    public ShardStorageMode StorageMode { get; }
 
     /// <summary>
     /// Gets the table name (for Table/Manual mode).
     /// </summary>
-    string? TableName { get; }
+    public string? TableName { get; }
 
     /// <summary>
     /// Gets the schema name (for Table/Manual mode).
     /// </summary>
-    string? SchemaName { get; }
+    public string? SchemaName { get; }
 
     /// <summary>
     /// Gets the connection string (for Database mode).
     /// </summary>
-    string? ConnectionString { get; }
+    public string? ConnectionString { get; }
 
     /// <summary>
     /// Gets the shard key value that this shard handles.
     /// E.g., "EU", "US", "2024" for property-based sharding.
     /// </summary>
-    string? ShardKeyValue { get; }
+    public string? ShardKeyValue { get; }
 
     /// <summary>
     /// Gets the optional date range this shard covers.
     /// </summary>
-    DateRange? DateRange { get; }
+    public DateRange? DateRange { get; }
 
     /// <summary>
     /// Gets the optional key range this shard covers.
     /// </summary>
-    KeyRange? KeyRange { get; }
+    public KeyRange? KeyRange { get; }
 
     /// <summary>
     /// Gets the shard tier for hot/warm/cold classification.
     /// </summary>
-    ShardTier Tier { get; }
+    public ShardTier Tier { get; }
 
     /// <summary>
     /// Gets whether this shard is read-only (e.g., archive).
     /// </summary>
-    bool IsReadOnly { get; }
+    public bool IsReadOnly { get; }
 
     /// <summary>
     /// Gets the priority for query ordering (lower = higher priority).
     /// </summary>
-    int Priority { get; }
+    public int Priority { get; }
 
     /// <summary>
     /// Gets whether this shard is active and available for queries/writes.
     /// </summary>
-    bool IsActive => !IsReadOnly;
+    public bool IsActive => !IsReadOnly;
 }

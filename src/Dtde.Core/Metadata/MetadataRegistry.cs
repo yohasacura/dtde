@@ -99,13 +99,13 @@ public sealed class MetadataRegistry : IMetadataRegistry
             }
 
             // Validate temporal configuration
-            if (entity.Validity is not null && entity.Validity.ValidFromProperty is null)
+            if (entity.TemporalConfiguration is not null && entity.TemporalConfiguration.ValidFromProperty is null)
             {
                 errors.Add($"Entity '{entity.ClrType.Name}' has temporal configuration but no ValidFrom property.");
             }
 
             // Validate sharding configuration
-            if (entity.Sharding is not null && entity.Sharding.ShardKeyProperties.Count == 0)
+            if (entity.ShardingConfiguration is not null && entity.ShardingConfiguration.ShardKeyProperties.Count == 0)
             {
                 errors.Add($"Entity '{entity.ClrType.Name}' has sharding configuration but no shard key properties.");
             }
