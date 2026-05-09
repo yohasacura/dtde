@@ -13,6 +13,58 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 > The migration is straightforward (5-10 lines per project); see "Migrating
 > from 1.0.0" below. The next published version number is to be decided.
 
+### Transactions: depth + production-grade recovery
+
+Three big additions completing the cross-shard transaction story.
+
+**1. Savepoints (within-shard partial rollback).**
+`ITransactionParticipant` gains `CreateSavepointAsync`,
+`RollbackToSavepointAsync`, and `ReleaseSavepointAsync`. They wrap EF
+Core's `IDbContextTransaction` savepoint methods, so on relational
+providers you can try a sub-operation and back it out without rolling
+the whole cross-shard transaction. Non-relational providers (in-memory)
+gracefully no-op via `IDbContextTransaction.SupportsSavepoints`.
+
+**2. Read-after-write within an ambient transaction.**
+The `ShardedQueryExecutor` now consults
+`ICrossShardTransactionCoordinator.CurrentTransaction`. When a
+cross-shard transaction is active, queries against any shard reuse that
+shard's open participant context — making writes earlier in the
+transaction visible to subsequent reads. Shards not yet enlisted are
+auto-enlisted at first touch, so the entire scope inside
+`BeginCrossShardTransactionAsync` is transactional.
+
+**3. Crash-recovery transaction log.**
+New `ITransactionLog` abstraction with two shipped implementations:
+- `InMemoryTransactionLog` — default, no persistence (still useful
+  because it surfaces in-doubt transactions during a single process
+  lifetime if `RecoverAsync` is called).
+- `FileBasedTransactionLog` — JSON-lines append-only file. Survives
+  process restarts; tolerant of corrupted trailing lines from a
+  mid-write crash. Suitable for single-node deployments and integration
+  tests.
+
+The coordinator now records lifecycle events through the log
+(transaction-started / participant-enlisted / participant-prepared /
+transaction-committed / transaction-rolled-back). On a coordinator
+restart, `coordinator.RecoverAsync()` replays the log:
+- transactions where every enlisted participant logged a "prepared"
+  vote are resolved as **committed** (the global decision was already
+  made before the crash — classic 2PC recovery rule);
+- transactions with partial prepares are resolved as **rolled back**.
+The decision is recorded so the log no longer flags those transactions
+as in-doubt. Application code can plug in a custom `ITransactionLog`
+backed by Postgres / Redis / etc. for multi-coordinator production
+deployments.
+
+**Bonus bug fix: `ShardTransactionParticipant.CommitAsync` no longer
+skips committing when a participant votes "ReadOnly".** Previously a
+participant with no fresh `ChangeTracker` work would short-circuit the
+local transaction commit, which silently rolled back any work committed
+via savepoints or earlier `SaveChangesAsync` calls inside the same
+transaction. The participant now always commits its open transaction
+and lets the relational provider release the locks naturally.
+
 ### Cross-shard transactions and bulk operations
 
 Three things landed for production-grade write paths.

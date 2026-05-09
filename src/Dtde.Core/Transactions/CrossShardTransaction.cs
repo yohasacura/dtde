@@ -48,6 +48,7 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
 {
     private readonly IShardRegistry _shardRegistry;
     private readonly ShardParticipantFactory _participantFactory;
+    private readonly ITransactionLog? _transactionLog;
     private readonly ILogger<CrossShardTransaction> _logger;
     private readonly ConcurrentDictionary<string, ShardTransactionParticipant> _participants = new();
     private readonly CancellationTokenSource _timeoutCts;
@@ -69,12 +70,36 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
         IShardRegistry shardRegistry,
         ShardParticipantFactory participantFactory,
         ILogger<CrossShardTransaction> logger)
+        : this(transactionId, options, shardRegistry, participantFactory, transactionLog: null, logger)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance with an <see cref="ITransactionLog"/>.
+    /// Lifecycle events are recorded so the coordinator's
+    /// <c>RecoverAsync</c> can drive in-doubt transactions to a terminal
+    /// state after a coordinator crash.
+    /// </summary>
+    /// <param name="transactionId">The unique transaction identifier.</param>
+    /// <param name="options">The transaction options.</param>
+    /// <param name="shardRegistry">The shard registry.</param>
+    /// <param name="participantFactory">Factory that materialises a per-shard context and starts its local transaction.</param>
+    /// <param name="transactionLog">Optional log for crash recovery.</param>
+    /// <param name="logger">The logger.</param>
+    internal CrossShardTransaction(
+        string transactionId,
+        CrossShardTransactionOptions options,
+        IShardRegistry shardRegistry,
+        ShardParticipantFactory participantFactory,
+        ITransactionLog? transactionLog,
+        ILogger<CrossShardTransaction> logger)
     {
         TransactionId = transactionId ?? throw new ArgumentNullException(nameof(transactionId));
         IsolationLevel = options?.IsolationLevel ?? CrossShardIsolationLevel.ReadCommitted;
         Timeout = options?.Timeout ?? CrossShardTransactionOptions.DefaultTimeout;
         _shardRegistry = shardRegistry ?? throw new ArgumentNullException(nameof(shardRegistry));
         _participantFactory = participantFactory ?? throw new ArgumentNullException(nameof(participantFactory));
+        _transactionLog = transactionLog;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _participantIsolationLevel = MapIsolationLevel(IsolationLevel);
         CreatedAt = DateTime.UtcNow;
@@ -184,6 +209,13 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
 
             State = TransactionState.Committed;
             TransactionLogMessages.TransactionCommitted(_logger, TransactionId, _participants.Count);
+
+            if (_transactionLog is not null)
+            {
+                await _transactionLog.RecordTransactionCommittedAsync(
+                    TransactionId,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (_timeoutCts.IsCancellationRequested)
         {
@@ -215,6 +247,13 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
 
         State = TransactionState.RolledBack;
         TransactionLogMessages.TransactionRolledBack(_logger, TransactionId);
+
+        if (_transactionLog is not null)
+        {
+            await _transactionLog.RecordTransactionRolledBackAsync(
+                TransactionId,
+                CancellationToken.None).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -311,6 +350,14 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
         else
         {
             TransactionLogMessages.EnlistedShard(_logger, shardId, TransactionId);
+
+            if (_transactionLog is not null)
+            {
+                await _transactionLog.RecordParticipantEnlistedAsync(
+                    TransactionId,
+                    shardId,
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
@@ -360,6 +407,21 @@ public sealed class CrossShardTransaction : ICrossShardTransaction
                 TransactionId,
                 failedShards.First(),
                 firstError);
+        }
+
+        // Record the prepared participants in the durable log BEFORE
+        // proceeding to the commit phase. This is the critical 2PC
+        // invariant: once every participant is logged as prepared, even a
+        // crashed coordinator can decide to commit on recovery.
+        if (_transactionLog is not null)
+        {
+            foreach (var result in results.Where(r => r.Vote == ParticipantVote.Prepared))
+            {
+                await _transactionLog.RecordParticipantPreparedAsync(
+                    TransactionId,
+                    result.ShardId,
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
 
         State = TransactionState.Prepared;

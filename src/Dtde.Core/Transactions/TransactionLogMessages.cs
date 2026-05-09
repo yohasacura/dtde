@@ -99,4 +99,22 @@ internal static partial class TransactionLogMessages
         Level = LogLevel.Warning,
         Message = "Transient error during cross-shard transaction (attempt {Attempt}/{MaxAttempts}). Retrying in {DelayMs}ms.")]
     public static partial void RetryingTransaction(ILogger logger, Exception ex, int attempt, int maxAttempts, double delayMs);
+
+    [LoggerMessage(
+        EventId = 10016,
+        Level = LogLevel.Information,
+        Message = "Recovery: {Count} in-doubt transaction(s) found in the durable log. Resolving each.")]
+    public static partial void RecoveringInDoubtTransactions(ILogger logger, int count);
+
+    [LoggerMessage(
+        EventId = 10017,
+        Level = LogLevel.Information,
+        Message = "Recovery: transaction {TransactionId} resolved as committed ({ParticipantCount} participants were prepared).")]
+    public static partial void RecoveredCommittedTransaction(ILogger logger, string transactionId, int participantCount);
+
+    [LoggerMessage(
+        EventId = 10018,
+        Level = LogLevel.Warning,
+        Message = "Recovery: transaction {TransactionId} resolved as rolled back ({EnlistedCount} enlisted, only {PreparedCount} prepared).")]
+    public static partial void RecoveredRolledBackTransaction(ILogger logger, string transactionId, int enlistedCount, int preparedCount);
 }
