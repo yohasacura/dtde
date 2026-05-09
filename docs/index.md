@@ -1,118 +1,76 @@
-# DTDE - Distributed Temporal Data Engine
+# DTDE — Distributed Temporal Data Engine
 
-<div class="grid cards" markdown>
-
--   :material-rocket-launch:{ .lg .middle } **Get Started in 5 Minutes**
-
-    ---
-
-    Install DTDE and run your first sharded query in under 5 minutes.
-
-    [:octicons-arrow-right-24: Quickstart](guides/quickstart.md)
-
--   :material-book-open-variant:{ .lg .middle } **Complete Guide**
-
-    ---
-
-    Learn all the concepts and features with step-by-step tutorials.
-
-    [:octicons-arrow-right-24: Getting Started](guides/getting-started.md)
-
--   :material-api:{ .lg .middle } **API Reference**
-
-    ---
-
-    Comprehensive documentation of all classes, methods, and configuration options.
-
-    [:octicons-arrow-right-24: API Docs](wiki/api-reference.md)
-
--   :material-github:{ .lg .middle } **Open Source**
-
-    ---
-
-    MIT licensed. Contribute on GitHub and help make DTDE better.
-
-    [:octicons-arrow-right-24: GitHub](https://github.com/yohasacura/dtde)
-
-</div>
-
----
-
-## What is DTDE?
-
-**DTDE** is a NuGet package that provides **transparent horizontal sharding** and **optional temporal versioning** for Entity Framework Core.
+Transparent horizontal **sharding**, **bi-temporal versioning**, and
+**cross-shard transactions** for Entity Framework Core. You write
+standard LINQ; DTDE handles routing, partition pruning, point-in-time
+reads, and two-phase commits across shards.
 
 ```csharp
-// Write standard EF Core LINQ - DTDE handles distribution transparently
-var customers = await db.Customers
+// Standard EF Core LINQ — DTDE prunes to the EU shard automatically.
+var euCustomers = await db.Customers
     .Where(c => c.Region == "EU")
     .ToListAsync();
 
-// Query data at a specific point in time
-var historicalOrders = await db.ValidAt<Order>(new DateTime(2024, 1, 15))
-    .Where(o => o.Status == "Completed")
+// Point-in-time query — fans out to the shards that hold valid rows.
+var asOfLastMonth = await db
+    .ValidAt<Contract>(DateTime.UtcNow.AddMonths(-1))
     .ToListAsync();
+
+// Cross-shard atomic write — 2PC across EU and US.
+await using var tx = await db.BeginCrossShardTransactionAsync();
+// ... writes to multiple shards ...
+await tx.CommitAsync();
 ```
 
-## Key Features
+## Install
 
-| Feature | Description |
-|---------|-------------|
-| :material-database-cog: **Transparent Sharding** | Distribute data across tables or databases invisibly |
-| :material-clock-outline: **Temporal Versioning** | Track entity history with point-in-time queries |
-| :material-swap-horizontal: **Cross-Shard Transactions** | ACID transactions across multiple database shards |
-| :material-cog: **Property Agnostic** | Use ANY property names for sharding and temporal boundaries |
-| :material-microsoft-visual-studio: **EF Core Native** | Works with standard LINQ - no special query syntax |
-| :material-test-tube: **Fully Tested** | 400+ unit and integration tests |
-
-## Installation
-
-=== "Package Manager"
-
-    ```powershell
-    Install-Package Dtde.EntityFramework
-    ```
-
-=== ".NET CLI"
-
-    ```bash
-    dotnet add package Dtde.EntityFramework
-    ```
-
-=== "PackageReference"
-
-    ```xml
-    <PackageReference Include="Dtde.EntityFramework" Version="1.0.0" />
-    ```
-
-## Quick Example
-
-```csharp
-public class AppDbContext : DtdeDbContext
-{
-    public DbSet<Order> Orders => Set<Order>();
-
-    protected override void OnConfiguring(DbContextOptionsBuilder options)
-    {
-        options
-            .UseSqlServer(connectionString)
-            .UseDtde(dtde => dtde
-                .ConfigureEntity<Order>(e => e
-                    .HasTemporalValidity("ValidFrom", "ValidTo"))
-                .AddShard(s => s
-                    .WithId("2024")
-                    .WithDateRange(new DateTime(2024, 1, 1), new DateTime(2024, 12, 31))
-                    .WithConnectionString(conn2024)));
-    }
-}
+```bash
+dotnet add package Dtde.EntityFramework
 ```
 
-## Community
+`Dtde.EntityFramework` transitively pulls in `Dtde.Core` and
+`Dtde.Abstractions`. Reference the lower-level packages directly only
+for advanced provider scenarios.
 
-- :fontawesome-brands-github: [GitHub Repository](https://github.com/yohasacura/dtde)
-- :material-bug: [Report Issues](https://github.com/yohasacura/dtde/issues)
-- :material-chat: [Discussions](https://github.com/yohasacura/dtde/discussions)
+## What's in the box
+
+| Capability | Description |
+|---|---|
+| **Sharding strategies** | `ShardBy` (property value), `ShardByHash` (even distribution), `ShardByDate` (time bucketing), `UseManualSharding` (pre-existing tables). |
+| **Storage modes** | Table-mode (one DB, many tables), database-mode (one DB per shard), mixed-mode (per-shard tables across multiple DBs). |
+| **Shard groups** | Per-entity shard topologies — eight hash buckets for users *and* three yearly buckets for orders, in the same DbContext. |
+| **Cross-shard transactions** | `BeginCrossShardTransactionAsync`, 2PC, savepoints, read-after-write, retry policy, isolation levels, **crash-recovery transaction log**. |
+| **Bulk operations** | `BulkInsertAsync`, `BulkUpdateAsync`, `BulkDeleteAsync` with provider-pluggable bulk loaders (SqlBulkCopy / PG COPY / etc.). |
+| **Streaming queries** | `ExecuteStreamingAsync` returns `IAsyncEnumerable<T>` with bounded buffering — constant memory regardless of result-set size. |
+| **Bi-temporal entities** | `HasTemporalValidity`, `ValidAt<T>`, `ValidBetween<T>`, `AllVersions<T>`, `CreateNewVersion`. |
+| **Multi-targeting** | .NET 8, .NET 9, .NET 10. |
+
+## Quick start
+
+→ **[Getting started](guides/getting-started.md)** — sharded
+`DbContext`, three logical shards, working LINQ in 5 minutes.
+
+## Topic guides
+
+- **[Sharding](guides/sharding-guide.md)** — strategies, storage modes, shard groups, routing rules.
+- **[Cross-shard transactions](guides/cross-shard-transactions.md)** — 2PC, savepoints, read-after-write.
+- **[Bulk operations](guides/bulk-operations.md)** — set-based fan-out, streaming, custom bulk providers.
+- **[Transaction log and recovery](guides/transaction-log-and-recovery.md)** — durable lifecycle log, `RecoverAsync`.
+- **[Temporal versioning](guides/temporal-guide.md)** — bi-temporal entities, point-in-time queries.
+- **[Migration guide](guides/migration-guide.md)** — moving an existing EF Core project to DTDE.
+
+## Reference
+
+- **[API reference](wiki/api-reference.md)** — public type catalogue.
+- **[Architecture](wiki/architecture.md)** — internal layering, key abstractions.
+- **[Configuration](wiki/configuration.md)** — every option on `DtdeOptionsBuilder`.
+- **[Troubleshooting](wiki/troubleshooting.md)** — common errors and fixes.
+
+## Source and samples
+
+- **[GitHub](https://github.com/yohasacura/dtde)** — source, issues, discussions.
+- **[Samples](https://github.com/yohasacura/dtde/tree/main/samples)** — eight runnable Web API projects, one per major concept.
 
 ## License
 
-DTDE is released under the [MIT License](https://github.com/yohasacura/dtde/blob/master/LICENSE).
+MIT. See [LICENSE](https://github.com/yohasacura/dtde/blob/main/LICENSE).

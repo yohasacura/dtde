@@ -1,896 +1,147 @@
-# API Reference
+# API reference
 
-Complete API reference for DTDE (Distributed Temporal Data Engine).
+The public surface of `Dtde.EntityFramework`. For deeper extensibility
+points (writing a custom sharding strategy, plugging in a transaction
+log against a custom store), see the matching interfaces in
+`Dtde.Abstractions`.
 
-## Table of Contents
+## DI registration
 
-- [DbContext Extensions](#dbcontext-extensions)
-- [Configuration API](#configuration-api)
-- [Query Methods](#query-methods)
-- [Cross-Shard Transactions](#cross-shard-transactions)
-- [Entity Configuration](#entity-configuration)
-- [Shard Configuration](#shard-configuration)
+| API | Description |
+|---|---|
+| `services.AddDtdeDbContext<TContext>((db, conn) => ..., dtde => ...)` | The single canonical entry point. The first lambda configures the EF Core provider for both the parent context and each per-shard context (DTDE invokes it with `conn = null` for the parent and with the shard's connection for each per-shard context). The second lambda configures DTDE — shards, defaults, diagnostics. |
+| `services.AddDtdeDbContext<TContext>(..., enableTransparentSharding: false)` | Same, but skips registering the `TransparentShardingInterceptor`, the cross-shard transaction coordinator, and the in-memory transaction log. Use when you want full manual control over cross-shard writes. |
 
----
+## `DtdeOptionsBuilder` (the `dtde =>` lambda)
 
-## DbContext Extensions
+### Shards (default group)
+
+| API | Description |
+|---|---|
+| `dtde.AddShard(string shardId)` | Adds a single table-mode shard to the default group. |
+| `dtde.AddShard(string shardId, string connectionString)` | Adds a single database-mode shard. |
+| `dtde.AddTableShardInDatabase(string shardId, string connectionString)` | Mixed-mode: per-shard tables hosted in a specific database (rather than the parent's default). |
+| `dtde.AddShards(params string[] shardIds)` | Bulk table-mode add. |
+| `dtde.AddShard(Action<ShardMetadataBuilder> configure)` | Full fluent control: tier, priority, read-only, date range, key range. |
+| `dtde.AddShardsFromConfig(string jsonPath)` | Load shard definitions from a JSON file. |
+
+### Shard groups
 
-### DtdeDbContext
+| API | Description |
+|---|---|
+| `dtde.AddShardGroup(string name, Action<DtdeShardGroupBuilder> configure)` | Declares a named group. The `configure` callback exposes `AddShard`, `AddShards`, `AddTableShardInDatabase` scoped to the group. Required when different entities have different shard topologies. |
 
-Base class for DTDE-enabled contexts.
+### Runtime options
+
+| API | Description |
+|---|---|
+| `dtde.SetDefaultTemporalContext(Func<DateTime>)` | Override the default `DateTime.UtcNow` clock for `ValidAt`. |
+| `dtde.SetMaxParallelShards(int)` | Cap on parallel shard queries during fan-out (default 10). |
+| `dtde.EnableDiagnostics()` | Verbose routing/execution logs. |
+| `dtde.EnableTestMode()` | Single-shard fallback (no fan-out). For test environments only. |
 
-```csharp
-namespace Dtde.EntityFramework;
+## `DtdeDbContext` extensions
 
-public abstract class DtdeDbContext : DbContext
-```
+### Lifecycle
 
-#### Properties
+| API | Description |
+|---|---|
+| `db.EnsureAllShardsCreatedAsync(CancellationToken)` | Creates the parent's tables, then walks every shard group and creates each shard's tables/database. |
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `TemporalContext` | `ITemporalContext` | Access to temporal context settings |
-| `MetadataRegistry` | `IMetadataRegistry` | Registry of entity metadata |
-| `ShardRegistry` | `IShardRegistry` | Registry of shard definitions |
+### Cross-shard transactions
 
-#### Methods
+| API | Description |
+|---|---|
+| `db.BeginCrossShardTransactionAsync(CancellationToken)` | Begin with default options. |
+| `db.BeginCrossShardTransactionAsync(CrossShardTransactionOptions, CancellationToken)` | Begin with explicit options (isolation level, timeout, retry, recovery). |
 
-##### ValidAt\<TEntity\>
+The returned `ICrossShardTransaction` is `IAsyncDisposable` — wrap in
+`await using` to ensure rollback on uncommitted exit.
 
-Returns entities valid at a specific point in time.
+### Bulk operations
 
-```csharp
-public IQueryable<TEntity> ValidAt<TEntity>(DateTime asOfDate) where TEntity : class
-```
+| API | Description |
+|---|---|
+| `db.BulkInsertAsync<TEntity>(IEnumerable<TEntity>, CancellationToken)` | Routes per shard, batches per shard, dispatches through the registered `IBulkInsertProvider` chain. Inside an ambient transaction, routes through the participant. |
+| `db.BulkUpdateAsync<TEntity>(filter, setters, CancellationToken)` | Set-based UPDATE fan-out. **EF 7-9 / EF 10 signatures differ** — picked at compile time via `#if NET10_0_OR_GREATER`. |
+| `db.BulkDeleteAsync<TEntity>(filter, CancellationToken)` | Set-based DELETE fan-out. |
 
-**Parameters:**
-- `asOfDate` - The point in time to query
+### Temporal queries
 
-**Returns:** `IQueryable<TEntity>` filtered to valid entities
+| API | Description |
+|---|---|
+| `db.ValidAt<TEntity>(DateTime asOfDate)` | Queryable filtered to entities valid at the given moment. |
+| `db.ValidBetween<TEntity>(DateTime start, DateTime end)` | Queryable filtered to entities valid in any subset of `[start, end]`. |
+| `db.AllVersions<TEntity>()` | Queryable bypassing temporal filtering — every version. |
+| `db.CreateNewVersion<TEntity>(currentEntity, changes, effectiveDate)` | Creates a new version of an entity, terminating the current one as of `effectiveDate.AddTicks(-1)`. |
+| `db.Terminate<TEntity>(entity, terminationDate)` | Closes off an entity's validity. |
+| `db.AddTemporal<TEntity>(entity, effectiveFrom)` | Adds a new temporal entity with `ValidFrom` initialised. |
 
-**Example:**
-```csharp
-var currentContracts = await db.ValidAt<Contract>(DateTime.Today).ToListAsync();
-```
+## `EntityTypeBuilder<T>` extensions (in `OnModelCreating`)
 
-##### ValidBetween\<TEntity\>
+### Sharding
 
-Returns entities valid within a date range.
+| API | Description |
+|---|---|
+| `entity.ShardBy(c => c.Property)` | Property-value sharding. Returns `ShardingBuilder<T>` for chaining. |
+| `entity.ShardByDate(c => c.DateProperty, DateShardInterval)` | Time-bucketed sharding. |
+| `entity.ShardByHash(c => c.Property, shardCount: N)` | Hash-modulo sharding. |
+| `entity.UseManualSharding(config => ...)` | Pre-existing tables (DBA-owned schema). |
 
-```csharp
-public IQueryable<TEntity> ValidBetween<TEntity>(DateTime startDate, DateTime endDate)
-    where TEntity : class
-```
+### `ShardingBuilder<T>` chained options
 
-**Parameters:**
-- `startDate` - Start of the range (inclusive)
-- `endDate` - End of the range (inclusive)
+| API | Description |
+|---|---|
+| `.WithStorageMode(ShardStorageMode)` | Override the entity's storage mode. |
+| `.WithTablePattern("{Table}_{ShardId}")` | Customise the per-shard table name. Tokens: `{Table}`, `{Schema}`, `{ShardId}`. |
+| `.WithoutMigrations()` | Skip EF Core migrations for this entity. |
+| `.UseShardGroup("name")` | Bind the entity to a named shard group. |
 
-**Returns:** `IQueryable<TEntity>` with entities valid at any point in the range
+### Temporal
 
-**Example:**
-```csharp
-var q1Contracts = await db.ValidBetween<Contract>(
-    new DateTime(2024, 1, 1),
-    new DateTime(2024, 3, 31))
-    .ToListAsync();
-```
-
-##### AllVersions\<TEntity\>
-
-Returns all versions of entities, bypassing temporal filtering.
-
-```csharp
-public IQueryable<TEntity> AllVersions<TEntity>() where TEntity : class
-```
-
-**Returns:** `IQueryable<TEntity>` with all entity versions
-
-**Example:**
-```csharp
-var history = await db.AllVersions<Contract>()
-    .Where(c => c.ContractNumber == "CTR-001")
-    .OrderBy(c => c.EffectiveDate)
-    .ToListAsync();
-```
-
----
-
-## Configuration API
-
-### DbContextOptionsBuilder Extensions
-
-#### UseDtde
-
-Configures DTDE for the DbContext.
-
-```csharp
-public static DbContextOptionsBuilder UseDtde(
-    this DbContextOptionsBuilder optionsBuilder,
-    Action<DtdeOptionsBuilder> configureOptions)
-```
-
-**Parameters:**
-- `configureOptions` - Action to configure DTDE options
-
-**Returns:** The options builder for chaining
-
-**Example:**
-```csharp
-services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseSqlServer(connectionString);
-    options.UseDtde(dtde =>
-    {
-        dtde.SetMaxParallelShards(10);
-        dtde.EnableDiagnostics();
-    });
-});
-```
-
-#### UseDtde (with pre-built options)
-
-```csharp
-public static DbContextOptionsBuilder UseDtde(
-    this DbContextOptionsBuilder optionsBuilder,
-    DtdeOptions options)
-```
-
-### DtdeOptionsBuilder
-
-Builder for configuring DTDE options.
-
-```csharp
-namespace Dtde.EntityFramework.Configuration;
-
-public sealed class DtdeOptionsBuilder
-```
-
-#### Methods
-
-##### AddShard (Action)
-
-Adds a shard using a builder action.
-
-```csharp
-public DtdeOptionsBuilder AddShard(Action<ShardMetadataBuilder> configure)
-```
-
-**Example:**
-```csharp
-dtde.AddShard(s => s
-    .WithId("EU")
-    .WithShardKeyValue("EU")
-    .WithTable("Customers_EU", "dbo")
-    .WithTier(ShardTier.Hot));
-```
-
-##### AddShard (IShardMetadata)
-
-Adds a pre-built shard metadata.
-
-```csharp
-public DtdeOptionsBuilder AddShard(IShardMetadata shard)
-```
-
-##### AddShardsFromConfig
-
-Loads shards from a JSON configuration file.
-
-```csharp
-public DtdeOptionsBuilder AddShardsFromConfig(string configPath)
-```
-
-**Parameters:**
-- `configPath` - Path to the JSON configuration file
-
-**Example:**
-```csharp
-dtde.AddShardsFromConfig("shards.json");
-```
-
-**JSON Format:**
-```json
-{
-  "shards": [
-    {
-      "shardId": "shard-2024",
-      "name": "Year 2024 Data",
-      "tableName": "Orders_2024",
-      "tier": "Hot",
-      "priority": 100,
-      "isReadOnly": false,
-      "dateRangeStart": "2024-01-01T00:00:00",
-      "dateRangeEnd": "2024-12-31T23:59:59"
-    }
-  ]
-}
-```
-
-##### ConfigureEntity\<TEntity\>
-
-Configures entity-specific metadata.
-
-```csharp
-public DtdeOptionsBuilder ConfigureEntity<TEntity>(
-    Action<EntityMetadataBuilder<TEntity>> configure)
-    where TEntity : class
-```
-
-##### SetMaxParallelShards
-
-Sets maximum concurrent shard queries.
-
-```csharp
-public DtdeOptionsBuilder SetMaxParallelShards(int maxParallel)
-```
-
-**Parameters:**
-- `maxParallel` - Maximum concurrent queries (default: 10)
-
-##### EnableDiagnostics
-
-Enables diagnostic logging.
-
-```csharp
-public DtdeOptionsBuilder EnableDiagnostics()
-```
-
-##### EnableTestMode
-
-Enables test mode (single shard, no distribution).
-
-```csharp
-public DtdeOptionsBuilder EnableTestMode()
-```
-
-##### SetDefaultTemporalContext
-
-Sets default temporal context provider.
-
-```csharp
-public DtdeOptionsBuilder SetDefaultTemporalContext(Func<DateTime> provider)
-```
-
-**Example:**
-```csharp
-dtde.SetDefaultTemporalContext(() => DateTime.UtcNow);
-```
-
----
-
-## Cross-Shard Transactions
-
-### ICrossShardTransactionCoordinator
-
-Coordinates transactions that span multiple database shards.
-
-```csharp
-namespace Dtde.Abstractions.Transactions;
-
-public interface ICrossShardTransactionCoordinator
-```
-
-#### Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `CurrentTransaction` | `ICrossShardTransaction?` | The active cross-shard transaction, if any |
-
-#### Methods
-
-##### BeginTransactionAsync
-
-Starts a new cross-shard transaction.
-
-```csharp
-Task<ICrossShardTransaction> BeginTransactionAsync(
-    CrossShardTransactionOptions? options = null,
-    CancellationToken cancellationToken = default)
-```
-
-**Parameters:**
-- `options` - Optional configuration for the transaction
-- `cancellationToken` - Cancellation token
-
-**Returns:** A new cross-shard transaction
-
-**Example:**
-```csharp
-await using var transaction = await coordinator.BeginTransactionAsync();
-await transaction.EnlistAsync("shard-eu");
-await transaction.EnlistAsync("shard-us");
-// Perform operations...
-await transaction.CommitAsync();
-```
-
-##### ExecuteInTransactionAsync
-
-Executes an action within a cross-shard transaction with automatic commit/rollback.
-
-```csharp
-Task ExecuteInTransactionAsync(
-    Func<ICrossShardTransaction, Task> action,
-    CrossShardTransactionOptions? options = null,
-    CancellationToken cancellationToken = default)
-```
-
-**Parameters:**
-- `action` - The action to execute within the transaction
-- `options` - Optional configuration
-- `cancellationToken` - Cancellation token
-
-**Example:**
-```csharp
-await coordinator.ExecuteInTransactionAsync(async tx =>
-{
-    await tx.EnlistAsync("shard-eu");
-    await tx.EnlistAsync("shard-us");
-
-    // Modify data in both shards
-    await context.SaveChangesAsync();
-});
-```
-
-##### ExecuteInTransactionAsync\<TResult\>
-
-Executes a function within a transaction and returns a result.
-
-```csharp
-Task<TResult> ExecuteInTransactionAsync<TResult>(
-    Func<ICrossShardTransaction, Task<TResult>> func,
-    CrossShardTransactionOptions? options = null,
-    CancellationToken cancellationToken = default)
-```
-
-##### RecoverAsync
-
-Recovers in-doubt transactions after a failure.
-
-```csharp
-Task<int> RecoverAsync(CancellationToken cancellationToken = default)
-```
-
-**Returns:** Number of transactions recovered
-
----
-
-### ICrossShardTransaction
-
-Represents an active cross-shard transaction.
-
-```csharp
-namespace Dtde.Abstractions.Transactions;
-
-public interface ICrossShardTransaction : IAsyncDisposable
-```
-
-#### Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `TransactionId` | `string` | Unique transaction identifier |
-| `State` | `TransactionState` | Current transaction state |
-| `IsolationLevel` | `CrossShardIsolationLevel` | Isolation level |
-| `Timeout` | `TimeSpan` | Transaction timeout |
-| `EnlistedShards` | `IReadOnlyCollection<string>` | Enlisted shard IDs |
-
-#### Methods
-
-##### EnlistAsync
-
-Enlists a shard in the transaction.
-
-```csharp
-Task EnlistAsync(string shardId, CancellationToken cancellationToken = default)
-```
-
-**Parameters:**
-- `shardId` - The shard ID to enlist
-
-**Example:**
-```csharp
-await transaction.EnlistAsync("shard-eu");
-```
-
-##### CommitAsync
-
-Commits the transaction using two-phase commit.
-
-```csharp
-Task CommitAsync(CancellationToken cancellationToken = default)
-```
-
-##### RollbackAsync
-
-Rolls back the transaction on all enlisted shards.
-
-```csharp
-Task RollbackAsync(CancellationToken cancellationToken = default)
-```
-
-##### GetParticipant
-
-Gets a transaction participant for a specific shard.
-
-```csharp
-ITransactionParticipant? GetParticipant(string shardId)
-```
-
----
-
-### CrossShardTransactionOptions
-
-Configuration options for cross-shard transactions.
-
-```csharp
-namespace Dtde.Abstractions.Transactions;
-
-public class CrossShardTransactionOptions
-```
-
-#### Properties
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `Timeout` | `TimeSpan` | 30 seconds | Transaction timeout |
-| `IsolationLevel` | `CrossShardIsolationLevel` | `ReadCommitted` | Isolation level |
-| `EnableRetry` | `bool` | `true` | Enable automatic retry |
-| `MaxRetryAttempts` | `int` | `3` | Maximum retry attempts |
-| `RetryDelay` | `TimeSpan` | 100ms | Initial retry delay |
-| `UseExponentialBackoff` | `bool` | `true` | Use exponential backoff |
-| `MaxRetryDelay` | `TimeSpan` | 10 seconds | Maximum retry delay |
-| `TransactionName` | `string?` | `null` | Optional name for logging |
-| `EnableRecovery` | `bool` | `false` | Enable transaction recovery |
-
-#### Static Presets
-
-```csharp
-// Default settings
-public static CrossShardTransactionOptions Default { get; }
-
-// Short-lived: 10s timeout, 2 retries, no recovery
-public static CrossShardTransactionOptions ShortLived { get; }
-
-// Long-running: 5min timeout, 5 retries, recovery enabled
-public static CrossShardTransactionOptions LongRunning { get; }
-```
-
-**Example:**
-```csharp
-var options = new CrossShardTransactionOptions
-{
-    Timeout = TimeSpan.FromMinutes(2),
-    IsolationLevel = CrossShardIsolationLevel.Serializable,
-    TransactionName = "FundsTransfer"
-};
-
-await coordinator.ExecuteInTransactionAsync(async tx =>
-{
-    // Operations
-}, options);
-```
-
----
-
-### TransactionState
-
-Enum representing transaction states.
-
-```csharp
-public enum TransactionState
-{
-    Active,       // Transaction is open
-    Preparing,    // Two-phase commit in progress
-    Committed,    // Successfully committed
-    RolledBack,   // Rolled back
-    Failed        // Failed during commit
-}
-```
-
-### CrossShardIsolationLevel
-
-Isolation levels for cross-shard transactions.
-
-```csharp
-public enum CrossShardIsolationLevel
-{
-    ReadUncommitted,
-    ReadCommitted,
-    RepeatableRead,
-    Serializable,
-    Snapshot
-}
-```
-
----
-
-## Query Methods
-
-### IShardedQueryExecutor
-
-Interface for executing queries across shards.
-
-```csharp
-namespace Dtde.EntityFramework.Query;
-
-public interface IShardedQueryExecutor
-```
-
-#### Methods
-
-##### ExecuteAsync\<TEntity\>
-
-Executes a query across all relevant shards.
-
-```csharp
-Task<IReadOnlyList<TEntity>> ExecuteAsync<TEntity>(
-    IQueryable<TEntity> query,
-    CancellationToken cancellationToken = default)
-    where TEntity : class
-```
-
-**Parameters:**
-- `query` - The LINQ query to execute
-- `cancellationToken` - Cancellation token
-
-**Returns:** Combined results from all shards
-
-##### ExecuteScalarAsync\<TEntity, TResult\>
-
-Executes a scalar aggregation across shards.
-
-```csharp
-Task<TResult> ExecuteScalarAsync<TEntity, TResult>(
-    IQueryable<TEntity> query,
-    Func<IEnumerable<TResult>, TResult> aggregator,
-    CancellationToken cancellationToken = default)
-    where TEntity : class
-```
-
-**Parameters:**
-- `query` - The LINQ query
-- `aggregator` - Function to aggregate shard results
-- `cancellationToken` - Cancellation token
-
----
-
-## Entity Configuration
-
-### EntityTypeBuilder Extensions
-
-Extensions for configuring sharding on entities.
-
-#### ShardBy
-
-Configures property-based sharding.
-
-```csharp
-public static ShardingConfigurationBuilder<TEntity> ShardBy<TEntity, TProperty>(
-    this EntityTypeBuilder<TEntity> builder,
-    Expression<Func<TEntity, TProperty>> propertyExpression)
-    where TEntity : class
-```
-
-**Example:**
-```csharp
-modelBuilder.Entity<Customer>(entity =>
-{
-    entity.ShardBy(c => c.Region);
-});
-```
-
-#### ShardByHash
-
-Configures hash-based sharding.
-
-```csharp
-public static ShardingConfigurationBuilder<TEntity> ShardByHash<TEntity, TProperty>(
-    this EntityTypeBuilder<TEntity> builder,
-    Expression<Func<TEntity, TProperty>> propertyExpression,
-    int shardCount)
-    where TEntity : class
-```
-
-**Parameters:**
-- `propertyExpression` - Property to hash
-- `shardCount` - Number of hash buckets/shards
-
-**Example:**
-```csharp
-entity.ShardByHash(c => c.Id, shardCount: 8);
-```
-
-#### ShardByDate
-
-Configures date-based sharding.
-
-```csharp
-public static ShardingConfigurationBuilder<TEntity> ShardByDate<TEntity>(
-    this EntityTypeBuilder<TEntity> builder,
-    Expression<Func<TEntity, DateTime>> dateProperty,
-    DateShardInterval interval = DateShardInterval.Year)
-    where TEntity : class
-```
-
-**Parameters:**
-- `dateProperty` - DateTime property to shard by
-- `interval` - Date interval (Year, Quarter, Month, Day)
-
-**Example:**
-```csharp
-entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Year);
-```
-
-#### HasTemporalValidity
-
-Configures temporal validity for an entity.
-
-```csharp
-public static TemporalConfigurationBuilder<TEntity> HasTemporalValidity<TEntity>(
-    this EntityTypeBuilder<TEntity> builder,
-    Expression<Func<TEntity, DateTime>> validFrom,
-    Expression<Func<TEntity, DateTime?>> validTo)
-    where TEntity : class
-```
-
-**Parameters:**
-- `validFrom` - Expression selecting the valid-from property
-- `validTo` - Expression selecting the valid-to property (nullable)
-
-**Example:**
-```csharp
-entity.HasTemporalValidity(
-    validFrom: c => c.EffectiveDate,
-    validTo: c => c.ExpirationDate);
-```
-
-### ShardingConfigurationBuilder
-
-Builder for sharding configuration.
-
-#### WithStorageMode
-
-Sets the storage mode for shards.
-
-```csharp
-public ShardingConfigurationBuilder<TEntity> WithStorageMode(ShardStorageMode mode)
-```
-
-**Parameters:**
-- `mode` - `ShardStorageMode.Tables` or `ShardStorageMode.Databases`
-
-### TemporalConfigurationBuilder
-
-Builder for temporal configuration.
-
-#### WithVersioningMode
-
-Sets the versioning behavior.
-
-```csharp
-public TemporalConfigurationBuilder<TEntity> WithVersioningMode(VersioningMode mode)
-```
-
-**Parameters:**
-- `mode` - `SoftVersion`, `AuditTrail`, or `AppendOnly`
-
-#### WithHistoryTable
-
-Configures a separate history table (for AuditTrail mode).
-
-```csharp
-public TemporalConfigurationBuilder<TEntity> WithHistoryTable(string tableName)
-```
-
-#### WithOpenEndedValue
-
-Sets the value used for open-ended records.
-
-```csharp
-public TemporalConfigurationBuilder<TEntity> WithOpenEndedValue(DateTime value)
-```
-
----
-
-## Shard Configuration
-
-### ShardMetadataBuilder
-
-Builder for creating shard metadata.
-
-```csharp
-namespace Dtde.Core.Metadata;
-
-public class ShardMetadataBuilder
-```
-
-#### Methods
-
-##### WithId
-
-Sets the unique shard identifier.
-
-```csharp
-public ShardMetadataBuilder WithId(string shardId)
-```
-
-##### WithName
-
-Sets the display name.
-
-```csharp
-public ShardMetadataBuilder WithName(string name)
-```
-
-##### WithShardKeyValue
-
-Sets the shard key value this shard handles.
-
-```csharp
-public ShardMetadataBuilder WithShardKeyValue(string keyValue)
-```
-
-##### WithTable
-
-Configures table-based sharding.
-
-```csharp
-public ShardMetadataBuilder WithTable(string tableName, string schemaName = "dbo")
-```
-
-##### WithConnectionString
-
-Configures database-based sharding.
-
-```csharp
-public ShardMetadataBuilder WithConnectionString(string connectionString)
-```
-
-##### WithDateRange
-
-Sets the date range this shard covers.
-
-```csharp
-public ShardMetadataBuilder WithDateRange(DateTime start, DateTime end)
-```
-
-##### WithTier
-
-Sets the storage tier.
-
-```csharp
-public ShardMetadataBuilder WithTier(ShardTier tier)
-```
-
-**Values:**
-- `ShardTier.Hot` - Active, fast storage
-- `ShardTier.Warm` - Less active data
-- `ShardTier.Cold` - Archived data
-- `ShardTier.Archive` - Long-term storage
-
-##### WithPriority
-
-Sets query priority (higher = queried first).
-
-```csharp
-public ShardMetadataBuilder WithPriority(int priority)
-```
-
-##### AsReadOnly
-
-Marks the shard as read-only.
-
-```csharp
-public ShardMetadataBuilder AsReadOnly()
-```
-
-##### Build
-
-Creates the shard metadata.
-
-```csharp
-public IShardMetadata Build()
-```
-
-**Example:**
-```csharp
-var shard = new ShardMetadataBuilder()
-    .WithId("archive-2020")
-    .WithName("2020 Archive")
-    .WithTable("Orders_2020", "archive")
-    .WithDateRange(new DateTime(2020, 1, 1), new DateTime(2020, 12, 31))
-    .WithTier(ShardTier.Archive)
-    .AsReadOnly()
-    .WithPriority(10)
-    .Build();
-```
-
-### ShardMetadata Static Methods
-
-Factory methods for common scenarios.
-
-#### ForTable
-
-Creates a table-based shard.
-
-```csharp
-public static ShardMetadata ForTable(
-    string shardId,
-    string tableName,
-    string? shardKeyValue = null,
-    string schemaName = "dbo")
-```
-
-#### ForDatabase
-
-Creates a database-based shard.
-
-```csharp
-public static ShardMetadata ForDatabase(
-    string shardId,
-    string name,
-    string connectionString,
-    string? shardKeyValue = null)
-```
-
----
-
-## Enumerations
-
-### ShardStorageMode
-
-```csharp
-public enum ShardStorageMode
-{
-    Tables,     // Multiple tables in same database
-    Databases   // Separate databases
-}
-```
-
-### ShardTier
-
-```csharp
-public enum ShardTier
-{
-    Hot,        // Active data, fast storage
-    Warm,       // Less active data
-    Cold,       // Archived data
-    Archive     // Long-term storage
-}
-```
-
-### DateShardInterval
-
-```csharp
-public enum DateShardInterval
-{
-    Year,
-    Month,
-    Quarter,
-    Week
-}
-```
-
-### VersioningMode
-
-```csharp
-public enum VersioningMode
-{
-    SoftVersion,    // Close old, create new
-    AuditTrail,     // Copy to history, update current
-    AppendOnly      // Never update, always insert
-}
-```
-
----
-
-## Next Steps
-
-- [Configuration](configuration.md) - Detailed configuration options
-- [Classes Reference](classes-reference.md) - Complete class documentation
-- [Troubleshooting](troubleshooting.md) - Common issues and solutions
-
----
-
-[← Back to Wiki](index.md) | [Configuration →](configuration.md)
+| API | Description |
+|---|---|
+| `entity.HasTemporalValidity(c => c.ValidFrom, c => c.ValidTo)` | Standard `(start, end)` validity. |
+| `entity.HasTemporalValidity(c => c.ValidFrom)` | Open-ended (no end date). |
+| `entity.HasTemporalContainment(TemporalContainmentRule)` | Parent-child validity rule. |
+
+## Cross-shard transaction types
+
+| Type | Notes |
+|---|---|
+| `CrossShardTransactionOptions` | Configuration. Static presets: `.Default`, `.ShortLived`, `.LongRunning`. |
+| `CrossShardIsolationLevel` | `ReadCommitted`, `RepeatableRead`, `Serializable`, `Snapshot`. |
+| `ICrossShardTransaction` | Public interface; `IAsyncDisposable`. `EnlistAsync`, `CommitAsync`, `RollbackAsync`, `GetParticipant`, `EnlistedShards`. |
+| `CrossShardTransaction` | Concrete impl; cast to it to call `GetOrCreateParticipantAsync(IShardMetadata or string)`. |
+| `ITransactionParticipant` | Per-shard participant. `Context`, `PrepareAsync`, `CommitAsync`, `RollbackAsync`, `CreateSavepointAsync`, `RollbackToSavepointAsync`, `ReleaseSavepointAsync`, `SupportsSavepoints`. |
+| `ICrossShardTransactionCoordinator` | Service. `BeginTransactionAsync`, `ExecuteInTransactionAsync<TResult>`, `CurrentTransaction`, `RecoverAsync`. |
+
+## Transaction log types
+
+| Type | Notes |
+|---|---|
+| `ITransactionLog` | The contract. Six methods: record start, enlisted, prepared, committed, rolled-back; query in-doubt. |
+| `InMemoryTransactionLog` | Default. No persistence. |
+| `FileBasedTransactionLog` | JSON-lines append-only file. `IDisposable`. Tolerant of corrupted final lines. |
+| `TransactionLogEntry` | Returned by `GetInDoubtTransactionsAsync` — id, started-at, enlisted/prepared participant lists, latest known state. |
+
+## Bulk insert provider types
+
+| Type | Notes |
+|---|---|
+| `IBulkInsertProvider` | The contract. `CanHandle(DbContext)`, `BulkInsertAsync<TEntity>(...)`. |
+| `DefaultBulkInsertProvider` | The fallback. Always claims; uses `AddRangeAsync` + `SaveChangesAsync`. |
+| `BulkInsertProviderChain` | Resolves providers in DI order with the default last. |
+
+## Streaming
+
+| API | Description |
+|---|---|
+| `IShardedQueryExecutor.ExecuteStreamingAsync<TEntity>(IQueryable<TEntity>, int? bufferSize, CancellationToken)` | Streams results as `IAsyncEnumerable<TEntity>`. Bounded buffer; per-shard producers are concurrent; abandoning the stream tears them down. |
+
+## See also
+
+- [Configuration](configuration.md) — JSON shard config schema, full
+  `DtdeOptionsBuilder` reference.
+- [Architecture](architecture.md) — internal layering and request flows.
+- [Troubleshooting](troubleshooting.md) — common errors and fixes.

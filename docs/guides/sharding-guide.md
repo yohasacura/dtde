@@ -1,488 +1,253 @@
-# Sharding Guide
+# Sharding guide
 
-This comprehensive guide covers all sharding strategies available in DTDE. Learn how to distribute your data effectively across multiple tables or databases.
+DTDE distributes a sharded entity's rows across multiple **shards**.
+This guide is the canonical reference for the routing rules — when to
+pick which strategy, how storage modes work, when you need shard
+groups, and how queries fan out.
 
-## Table of Contents
+For a 5-minute hands-on intro, see [Getting started](getting-started.md).
 
-- [Overview](#overview)
-- [Storage Modes](#storage-modes)
-- [Sharding Strategies](#sharding-strategies)
-  - [Property-Based Sharding](#property-based-sharding)
-  - [Hash Sharding](#hash-sharding)
-  - [Date Sharding](#date-sharding)
-  - [Range Sharding](#range-sharding)
-  - [Alphabetic Sharding](#alphabetic-sharding)
-- [Shard Configuration](#shard-configuration)
-- [Query Optimization](#query-optimization)
-- [Best Practices](#best-practices)
+## How DTDE routes
 
----
+Two layers, one contract:
 
-## Overview
+1. **Per entity** (in `OnModelCreating`) you declare *how* a row maps
+   to a shard key — `ShardBy`, `ShardByDate`, `ShardByHash`, or the
+   manual catch-all.
+2. **In `Program.cs`** you declare *the shards themselves* — their
+   ids, where they live (table-mode, database-mode, mixed-mode), and
+   which **shard group** they belong to.
 
-DTDE provides **transparent horizontal sharding** for EF Core entities. Your application code remains unchanged while DTDE handles:
+The contract that ties them together: the shard's id (the string you
+pass to `AddShard("EU")` or `AddShards("0", "1", ...)`) must equal the
+value the entity's shard-key property carries at runtime, modulo the
+strategy's transform (e.g. hash-modulo-N, year extraction). If a row's
+shard key doesn't match any registered shard, DTDE throws at write
+time.
 
-- **Query Routing**: Automatically determines which shard(s) to query
-- **Parallel Execution**: Queries multiple shards simultaneously
-- **Result Merging**: Combines results into a unified response
-- **Write Routing**: Routes inserts/updates to the correct shard
+## Strategies
 
-### Key Principle
+### `ShardBy` — property value
 
-> Write standard EF Core LINQ queries. DTDE handles the distribution.
-
-```csharp
-// You write this (standard EF Core):
-var customers = await db.Customers
-    .Where(c => c.Region == "EU")
-    .OrderBy(c => c.Name)
-    .ToListAsync();
-
-// DTDE executes:
-// 1. Analyzes query to determine target shard(s)
-// 2. Routes to EU shard (optimized)
-// 3. Returns results
-```
-
----
-
-## Storage Modes
-
-DTDE supports two storage modes for shards:
-
-### Table Sharding
-
-Multiple tables in the **same database**. Best for:
-- Simpler deployment
-- Shared infrastructure
-- Moderate data volumes
+Use when the shard key is a categorical property: region, tenant id,
+country code, etc.
 
 ```csharp
-entity.ShardBy(c => c.Region)
-      .WithStorageMode(ShardStorageMode.Tables);
+modelBuilder.Entity<Customer>().ShardBy(c => c.Region);
 
-// Creates tables:
-// - Customers_EU
-// - Customers_US
-// - Customers_APAC
+dtde => dtde.AddShards("EU", "US", "APAC");
 ```
 
-### Database Sharding
+The shard chosen for an insert is the one whose id equals
+`customer.Region.ToString()` (case-insensitive). Queries with a
+`Where(c => c.Region == "EU")` predicate prune to one shard; queries
+without one fan out across all registered shards.
 
-Separate databases (same or different servers). Best for:
-- True horizontal scaling
-- Data isolation requirements
-- Very large datasets
-- Compliance/geographic requirements
+Best for: GDPR-style regional residency, multi-tenant SaaS, anywhere
+the shard key is human-meaningful.
+
+### `ShardByHash` — even distribution
+
+Use when the shard key has no semantic meaning — you just want load
+spread evenly.
 
 ```csharp
-entity.ShardBy(c => c.Region)
-      .WithStorageMode(ShardStorageMode.Databases);
+modelBuilder.Entity<UserProfile>().ShardByHash(u => u.UserId, shardCount: 8);
 
-// Uses separate databases:
-// - Server_EU/Customers
-// - Server_US/Customers
-// - Server_APAC/Customers
+dtde => dtde.AddShards("0", "1", "2", "3", "4", "5", "6", "7");
 ```
 
----
+DTDE computes the user-id hash modulo `shardCount` to pick a shard.
+Queries with `Where(u => u.UserId == X)` prune to one shard (the hash
+locates it); queries without fan out across all `shardCount` shards.
 
-## Sharding Strategies
+Best for: anything keyed by a UUID / sequential ID where you want
+predictable, hot-spot-free distribution.
 
-### Property-Based Sharding
+### `ShardByDate` — time bucketing
 
-Shard by any entity property value. Ideal for categorical data.
-
-#### Basic Property Sharding
+Use when data has a natural time component and you want hot/warm/cold
+tiering or rolling-window retention.
 
 ```csharp
-// Shard by a string property
-modelBuilder.Entity<Customer>(entity =>
-{
-    entity.ShardBy(c => c.Region);
-    // Shards: Customers_EU, Customers_US, Customers_APAC
-});
+modelBuilder.Entity<AuditLog>().ShardByDate(a => a.Timestamp, DateShardInterval.Year);
 
-// Shard by an enum property
-modelBuilder.Entity<Order>(entity =>
-{
-    entity.ShardBy(o => o.Status);
-    // Shards: Orders_Pending, Orders_Processing, Orders_Completed
-});
+dtde => dtde.AddShards("2023", "2024", "2025");
 ```
 
-#### Composite Property Sharding
+Intervals: `Day`, `Month`, `Quarter`, `Year`. DTDE extracts the
+relevant component of the date to pick the shard.
+
+Queries with a `Where(a => a.Timestamp >= start && a.Timestamp < end)`
+predicate prune to the date-range-overlapping shards. Queries without
+fan out.
+
+Best for: audit logs, time-series metrics, transaction history, any
+append-mostly workload.
+
+### `UseManualSharding` — pre-existing tables
+
+Use when shard tables are managed externally (a SQL project, a DBA,
+etc.) and you need DTDE to route to specific names but not own the
+schema.
 
 ```csharp
-// Shard by multiple properties
-modelBuilder.Entity<SalesRecord>(entity =>
-{
-    entity.ShardBy(s => new { s.Year, s.Region });
-    // Shards: SalesRecords_2024_EU, SalesRecords_2024_US, etc.
-});
-```
-
-#### Configuration
-
-```csharp
-options.UseDtde(dtde =>
-{
-    dtde.AddShard(s => s
-        .WithId("EU")
-        .WithShardKeyValue("EU")
-        .WithTable("Customers_EU", "dbo"));
-
-    dtde.AddShard(s => s
-        .WithId("US")
-        .WithShardKeyValue("US")
-        .WithTable("Customers_US", "dbo"));
-});
-```
-
-### Hash Sharding
-
-Distribute data evenly using a hash function. Ideal for:
-- Even distribution
-- No natural partitioning key
-- High-cardinality keys (IDs)
-
-```csharp
-// Hash by ID into 8 shards
-modelBuilder.Entity<Customer>(entity =>
-{
-    entity.ShardByHash(c => c.Id, shardCount: 8);
-    // Shards: Customers_0, Customers_1, ... Customers_7
-});
-```
-
-#### How It Works
-
-```
-ID: 1234  → Hash: 1234 % 8 = 2 → Customers_2
-ID: 5678  → Hash: 5678 % 8 = 6 → Customers_6
-ID: 9999  → Hash: 9999 % 8 = 7 → Customers_7
-```
-
-#### Configuration
-
-```csharp
-options.UseDtde(dtde =>
-{
-    for (int i = 0; i < 8; i++)
+modelBuilder.Entity<Order>()
+    .UseManualSharding(config =>
     {
-        dtde.AddShard(s => s
-            .WithId($"Shard{i}")
-            .WithShardKeyValue(i.ToString())
-            .WithTable($"Customers_{i}", "dbo"));
-    }
-});
+        config.AddTable("dbo.Orders_2023", o => o.OrderDate.Year == 2023);
+        config.AddTable("dbo.Orders_2024", o => o.OrderDate.Year == 2024);
+        config.MigrationsEnabled = false;
+    });
 ```
 
-### Date Sharding
+## Storage modes
 
-Partition data by time periods. Ideal for:
-- Time-series data
-- Log/event data
-- Financial records
-- Archival strategies
+How a shard physically lives. Configured per shard, not per entity.
 
-#### Standard Intervals
+### Table-mode (`AddShards("EU", "US", ...)`)
+
+One database, multiple per-shard tables (`Customers_EU`,
+`Customers_US`, ...). The default. Cheapest to operate; suitable for
+moderate data volumes where the bottleneck is row count, not storage.
 
 ```csharp
-// Yearly sharding
-entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Year);
-// Shards: Orders_2023, Orders_2024, Orders_2025
-
-// Monthly sharding
-entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Month);
-// Shards: Orders_2024_01, Orders_2024_02, ... Orders_2024_12
-
-// Quarterly sharding
-entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Quarter);
-// Shards: Orders_2024_Q1, Orders_2024_Q2, Orders_2024_Q3, Orders_2024_Q4
-
-// Daily sharding
-entity.ShardByDate(o => o.CreatedAt, DateShardInterval.Day);
-// Shards: Orders_2024_01_01, Orders_2024_01_02, ...
+dtde => dtde.AddShards("EU", "US", "APAC");
 ```
 
-#### Configuration with Date Ranges
+DTDE rewrites each per-shard `DbContext`'s table name via
+`DtdeShardModelCustomizer`. The default pattern is `{Table}_{ShardId}`;
+override per entity via `WithTablePattern("custom_{ShardId}_{Table}")`.
+
+### Database-mode (`AddShard(id, connectionString)`)
+
+One database per shard. Real horizontal scaling; data physically
+isolated. Use for compliance (data residency), very large datasets, or
+when each shard runs on its own server.
 
 ```csharp
-options.UseDtde(dtde =>
-{
-    dtde.AddShard(s => s
-        .WithId("2023")
-        .WithTable("Orders_2023", "dbo")
-        .WithDateRange(new DateTime(2023, 1, 1), new DateTime(2023, 12, 31))
-        .WithTier(ShardTier.Cold)  // Archived data
-        .AsReadOnly());
-
-    dtde.AddShard(s => s
-        .WithId("2024")
-        .WithTable("Orders_2024", "dbo")
-        .WithDateRange(new DateTime(2024, 1, 1), new DateTime(2024, 12, 31))
-        .WithTier(ShardTier.Hot));
-
-    dtde.AddShard(s => s
-        .WithId("2025")
-        .WithTable("Orders_2025", "dbo")
-        .WithDateRange(new DateTime(2025, 1, 1), new DateTime(2025, 12, 31))
-        .WithTier(ShardTier.Hot));
-});
+dtde => dtde
+    .AddShard("EU", "Server=eu.db;...")
+    .AddShard("US", "Server=us.db;...")
+    .AddShard("APAC", "Server=apac.db;...");
 ```
 
-### Range Sharding
+The entity keeps its base table name (`Customers`) inside each
+database; no per-shard table rewriting.
 
-Partition by numeric or value ranges. Ideal for:
-- ID ranges
-- Amount/value tiers
-- Sequential data
+### Mixed-mode (`AddTableShardInDatabase(id, connectionString)`)
+
+Per-shard tables spread across multiple databases. The compromise
+between table-mode and database-mode: you get physical isolation
+between database boundaries but multiple shards can co-exist in one
+database to amortise infrastructure cost.
 
 ```csharp
-// Shard by ID ranges
-entity.ShardByRange(c => c.Id, new[]
-{
-    new ShardRange("legacy", 0, 999_999),
-    new ShardRange("current", 1_000_000, 9_999_999),
-    new ShardRange("new", 10_000_000, int.MaxValue)
-});
-
-// Shard by amount tiers
-entity.ShardByRange(o => o.Amount, new[]
-{
-    new ShardRange("small", 0m, 999.99m),
-    new ShardRange("medium", 1000m, 9999.99m),
-    new ShardRange("large", 10000m, decimal.MaxValue)
-});
+dtde => dtde
+    .AddTableShardInDatabase("EU",   "Server=primary.db;...")
+    .AddTableShardInDatabase("US",   "Server=primary.db;...")
+    .AddTableShardInDatabase("APAC", "Server=secondary.db;...");
 ```
 
-### Alphabetic Sharding
+`primary.db` ends up with `Customers_EU` + `Customers_US`;
+`secondary.db` ends up with `Customers_APAC`. DTDE's per-shard
+customizer rewrites the table name; the per-shard context factory uses
+the right connection.
 
-Partition by first letter(s). Ideal for:
-- Name-based lookups
-- Directory-style data
-- Contact management
+## Shard groups
+
+If two entities in the same `DbContext` need **different shard
+topologies** (eight hash buckets for users *and* three yearly buckets
+for orders), bind each entity to a named **shard group**:
 
 ```csharp
-// Single letter shards
-entity.ShardByAlphabet(c => c.LastName);
-// Shards: Customers_A, Customers_B, ... Customers_Z
+dtde => dtde
+    .AddShardGroup("hash8", g => g.AddShards("0", "1", "2", "3", "4", "5", "6", "7"))
+    .AddShardGroup("years", g => g.AddShards("2023", "2024", "2025"));
 
-// Grouped letter ranges
-entity.ShardByAlphabet(c => c.LastName, new[] { "A-F", "G-L", "M-R", "S-Z" });
-// Shards: Customers_A-F, Customers_G-L, Customers_M-R, Customers_S-Z
+modelBuilder.Entity<UserProfile>().ShardByHash(u => u.UserId, 8).UseShardGroup("hash8");
+modelBuilder.Entity<Order>().ShardByDate(o => o.OrderDate).UseShardGroup("years");
 ```
 
----
+**Same local id in different groups means different physical shards.**
+Shard `"0"` in `hash8` is a different shard from shard `"0"` in
+`hash3`. DTDE keys participants and the durable transaction log by
+**fully-qualified id** (`groupName::shardId`) so the two never alias.
 
-## Shard Configuration
+The simple "all entities share one shard topology" case stays
+configuration-free: `dtde.AddShards("EU", "US", "APAC")` puts every
+shard in the implicit default group, and entities that don't call
+`UseShardGroup` bind to it implicitly.
 
-### Programmatic Configuration
+A misspelled group name throws at first DbContext use:
 
-```csharp
-options.UseDtde(dtde =>
-{
-    dtde.AddShard(s => s
-        .WithId("Shard1")
-        .WithName("Primary Shard")
-        .WithShardKeyValue("EU")
-        .WithTable("Customers_EU", "dbo")
-        .WithTier(ShardTier.Hot)
-        .WithPriority(100));
-});
+```text
+InvalidOperationException: Entity 'Order' is bound to shard group 'years',
+but no such group is registered. Add it with dtde.AddShardGroup("years", ...)
+or remove the UseShardGroup(...) call on the entity.
 ```
 
-### JSON Configuration
+## Query routing
 
-Create `shards.json`:
+The query executor uses the entity's group to scope fan-out. For a
+sharded entity:
 
-```json
-{
-  "shards": [
-    {
-      "shardId": "shard-2024",
-      "name": "Year 2024 Data",
-      "tableName": "Orders_2024",
-      "tier": "Hot",
-      "priority": 100,
-      "isReadOnly": false,
-      "dateRangeStart": "2024-01-01T00:00:00",
-      "dateRangeEnd": "2024-12-31T23:59:59"
-    },
-    {
-      "shardId": "shard-2023",
-      "name": "Year 2023 Archive",
-      "tableName": "Orders_2023",
-      "tier": "Cold",
-      "priority": 50,
-      "isReadOnly": true,
-      "dateRangeStart": "2023-01-01T00:00:00",
-      "dateRangeEnd": "2023-12-31T23:59:59"
-    }
-  ]
-}
-```
+| Predicate on shard key | What DTDE does |
+|---|---|
+| Equality on the shard-key property (and the strategy can map it to a single shard) | **Pruned** — query runs on exactly one shard. |
+| Date range that intersects N shards (date strategy only) | Fanned out across the N intersecting shards. |
+| No predicate on the shard key | Fanned out across **every** shard in the entity's group. |
 
-Load in configuration:
+For non-sharded entities (no `ShardBy*` annotation), the query goes to
+the default group's first hot shard.
 
-```csharp
-options.UseDtde(dtde =>
-{
-    dtde.AddShardsFromConfig("shards.json");
-});
-```
+## Writes
 
-### Shard Tiers
+`SaveChangesAsync` on the parent context triggers the
+`TransparentShardingInterceptor`. It groups changes by target shard and
+either:
 
-DTDE supports tiered storage for performance optimization:
+- writes them all to one shard (when only one shard is touched), or
+- automatically wraps the write in a cross-shard transaction (2PC,
+  when more than one shard is touched).
 
-| Tier | Description | Use Case |
-|------|-------------|----------|
-| `Hot` | Active data, fast storage | Current records, frequent access |
-| `Warm` | Less active data | Recent historical data |
-| `Cold` | Archived data, slow storage | Old records, infrequent access |
-| `Archive` | Long-term storage | Compliance, audit trails |
+The fast paths apply equally inside an explicit
+`BeginCrossShardTransactionAsync` scope — see
+[cross-shard transactions](cross-shard-transactions.md).
 
-```csharp
-dtde.AddShard(s => s
-    .WithId("archive-2020")
-    .WithTable("Orders_2020", "archive")
-    .WithTier(ShardTier.Archive)
-    .AsReadOnly());  // Prevent writes to archived data
-```
+For high-throughput insertion, prefer `BulkInsertAsync` —
+[bulk operations](bulk-operations.md).
 
----
+## Provisioning
 
-## Query Optimization
+`db.EnsureAllShardsCreatedAsync()` walks every shard group and, for
+each shard:
 
-### Shard-Aware Queries
+- **table-mode** — creates the per-shard tables in the parent's
+  database via `IRelationalDatabaseCreator.CreateTablesAsync` against
+  a per-shard model that has only the in-group entities (out-of-group
+  entities are excluded so each shard provisions only what it owns);
+- **database-mode** — creates the per-shard database and its tables
+  via `EnsureCreatedAsync`;
+- **manual mode** — no-op.
 
-DTDE optimizes queries based on predicates:
+Use this for samples, integration tests, and dev environments. In
+production, use EF Core migrations per shard.
 
-```csharp
-// ✅ Optimized: Only queries EU shard
-var euCustomers = await db.Customers
-    .Where(c => c.Region == "EU")
-    .ToListAsync();
+## Patterns by use case
 
-// ✅ Optimized: Only queries 2024 shard
-var recentOrders = await db.Orders
-    .Where(o => o.CreatedAt >= new DateTime(2024, 1, 1))
-    .ToListAsync();
+| Use case | Strategy | Storage | Group? |
+|---|---|---|---|
+| Multi-region SaaS | `ShardBy(t => t.TenantId)` or `ShardBy(c => c.Region)` | Database-mode | Default |
+| Time-series logs / metrics | `ShardByDate(...)` | Table-mode (cheap) or mixed-mode (tiered storage) | Default |
+| Even distribution / hot-spot avoidance | `ShardByHash(...)` | Table-mode | Default |
+| Mixed: users-by-hash + orders-by-year | `ShardByHash` + `ShardByDate` | Either | **Named groups** |
+| Pre-existing tables (DBA-owned schema) | `UseManualSharding(...)` | Manual | Default |
 
-// ⚠️ Cross-shard: Queries all shards
-var allCustomers = await db.Customers.ToListAsync();
-```
+## See also
 
-### Parallel Execution
-
-Configure parallel execution:
-
-```csharp
-options.UseDtde(dtde =>
-{
-    dtde.SetMaxParallelShards(10);  // Max concurrent shard queries
-});
-```
-
-### Diagnostics
-
-Enable diagnostics to monitor shard queries:
-
-```csharp
-options.UseDtde(dtde =>
-{
-    dtde.EnableDiagnostics();
-});
-```
-
----
-
-## Best Practices
-
-### 1. Choose the Right Shard Key
-
-| Data Type | Recommended Strategy |
-|-----------|---------------------|
-| Categorical (Region, Status) | Property-based |
-| High-cardinality ID | Hash |
-| Time-series | Date-based |
-| Sequential numeric | Range |
-| Names/Text | Alphabetic |
-
-### 2. Balance Shard Sizes
-
-Aim for even distribution. Monitor and rebalance if needed.
-
-### 3. Consider Query Patterns
-
-Choose a shard key that aligns with your most common query filters.
-
-### 4. Plan for Growth
-
-- Use date sharding for naturally growing data
-- Configure automatic shard creation for row-count based sharding
-
-### 5. Implement Tiered Storage
-
-Move old data to cold/archive tiers for cost optimization.
-
-### 6. Test Cross-Shard Queries
-
-Ensure acceptable performance for queries spanning multiple shards.
-
----
-
-## Examples
-
-### Multi-Tenant SaaS
-
-```csharp
-entity.ShardBy(e => e.TenantId)
-      .WithStorageMode(ShardStorageMode.Databases);
-
-// Each tenant gets an isolated database
-dtde.AddShard(s => s
-    .WithId("tenant-acme")
-    .WithShardKeyValue("acme")
-    .WithConnectionString("Server=shard1;Database=Tenant_Acme;..."));
-```
-
-### Time-Series Data
-
-```csharp
-entity.ShardByDate(e => e.Timestamp, DateShardInterval.Month)
-      .WithStorageMode(ShardStorageMode.Tables);
-
-// Automatic monthly tables
-// Metrics_2024_01, Metrics_2024_02, etc.
-```
-
-### Geographic Distribution
-
-```csharp
-entity.ShardBy(e => e.Region)
-      .WithStorageMode(ShardStorageMode.Databases);
-
-// Regional databases for compliance
-dtde.AddShard(s => s
-    .WithId("EU")
-    .WithConnectionString("Server=eu.db.com;Database=Data;..."));
-
-dtde.AddShard(s => s
-    .WithId("US")
-    .WithConnectionString("Server=us.db.com;Database=Data;..."));
-```
-
----
-
-## Next Steps
-
-- [Temporal Guide](temporal-guide.md) - Add version tracking
-- [Configuration Reference](../wiki/configuration.md) - All options
-- [API Reference](../wiki/api-reference.md) - Complete API docs
-
----
-
-[← Back to Guides](index.md) | [Next: Temporal Guide →](temporal-guide.md)
+- [Getting started](getting-started.md) — 5-minute walk-through.
+- [Cross-shard transactions](cross-shard-transactions.md) — how
+  routing interacts with 2PC.
+- [Bulk operations](bulk-operations.md) — set-based fan-out.
+- The runnable [samples](https://github.com/yohasacura/dtde/tree/main/samples) — one per strategy.

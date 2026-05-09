@@ -1,254 +1,118 @@
 # DTDE Sample Projects
 
-This directory contains comprehensive sample projects demonstrating different sharding strategies available in the Distributed Temporal Data Engine (DTDE).
+Eight runnable Web API samples covering every shipping DTDE feature.
 
-## Sample Projects Overview
+| Project | What it shows |
+|---|---|
+| [`Dtde.Sample.WebApi`](./Dtde.Sample.WebApi/) | Smallest possible getting-started app. |
+| [`Dtde.Samples.RegionSharding`](./Dtde.Samples.RegionSharding/) | Property-value sharding by `Region` (`ShardBy`). |
+| [`Dtde.Samples.DateSharding`](./Dtde.Samples.DateSharding/) | Time-bucketed sharding (`ShardByDate`). |
+| [`Dtde.Samples.HashSharding`](./Dtde.Samples.HashSharding/) | Hash-based even distribution (`ShardByHash`). |
+| [`Dtde.Samples.MultiTenant`](./Dtde.Samples.MultiTenant/) | Tenant-id sharding for SaaS. |
+| [`Dtde.Samples.Combined`](./Dtde.Samples.Combined/) | Multiple strategies in one app — uses **shard groups** to give each entity its own topology. |
+| **[`Dtde.Samples.Transactions`](./Dtde.Samples.Transactions/)** | **NEW.** Cross-shard 2PC, savepoints, read-after-write, crash-recovery log. |
+| **[`Dtde.Samples.BulkOperations`](./Dtde.Samples.BulkOperations/)** | **NEW.** `BulkInsert/Update/Delete`, `ExecuteStreamingAsync`, custom `IBulkInsertProvider`. |
 
-| Project | Sharding Strategy | Use Case |
-|---------|------------------|----------|
-| [Dtde.Sample.WebApi](./Dtde.Sample.WebApi/) | Basic | Simple getting started example |
-| [Dtde.Samples.RegionSharding](./Dtde.Samples.RegionSharding/) | Property-Based | Multi-region data residency |
-| [Dtde.Samples.DateSharding](./Dtde.Samples.DateSharding/) | Date-Based | Time-series data, audit logs |
-| [Dtde.Samples.HashSharding](./Dtde.Samples.HashSharding/) | Hash-Based | Even data distribution |
-| [Dtde.Samples.MultiTenant](./Dtde.Samples.MultiTenant/) | Property-Based (TenantId) | SaaS multi-tenancy |
-| [Dtde.Samples.Combined](./Dtde.Samples.Combined/) | Mixed Strategies | Complex enterprise scenarios |
+## What's in the box
 
----
+### Sharding
 
-## 1. Region Sharding (`Dtde.Samples.RegionSharding`)
+Property-value sharding is the simplest case — one entity, one shard key:
 
-Demonstrates **property-based sharding by region** for data residency compliance.
-
-### Entities
-- **Customer**: Sharded by `Region` (EU, US, APAC)
-- **Order**: Sharded by `Region` (co-located with customers)
-- **OrderItem**: Sharded by `Region` (co-located with orders)
-
-### Key Configuration
 ```csharp
-// In DbContext.OnModelCreating()
-modelBuilder.Entity<Customer>(entity =>
-{
-    entity.ShardBy(c => c.Region);
-});
+modelBuilder.Entity<Customer>().ShardBy(c => c.Region);
+
+// Program.cs
+dtde.AddShards("EU", "US", "APAC");
 ```
 
-### Use Cases
-- GDPR compliance (EU data stays in EU)
-- Regional data centers
-- Latency optimization by geography
+Hash-based sharding spreads load evenly across a fixed shard count:
 
----
-
-## 2. Date Sharding (`Dtde.Samples.DateSharding`)
-
-Demonstrates **date-based sharding** for time-series data.
-
-### Entities
-- **Transaction**: Sharded by `TransactionDate` (monthly)
-- **AuditLog**: Sharded by `Timestamp` (daily)
-- **MetricDataPoint**: Sharded by `Timestamp` (quarterly)
-
-### Key Configuration
 ```csharp
-// In DbContext.OnModelCreating()
-modelBuilder.Entity<Transaction>(entity =>
-{
-    entity.ShardByDate(t => t.TransactionDate);
-});
+modelBuilder.Entity<UserProfile>().ShardByHash(u => u.UserId, shardCount: 8);
+
+dtde.AddShards("0", "1", "2", "3", "4", "5", "6", "7");
 ```
 
-### Use Cases
-- Financial transaction history
-- Audit logs with retention policies
-- Time-series metrics and analytics
-- Hot/warm/cold data tiering
+Date-based sharding partitions by time interval:
 
----
-
-## 3. Hash Sharding (`Dtde.Samples.HashSharding`)
-
-Demonstrates **hash-based sharding** for even data distribution.
-
-### Entities
-- **UserProfile**: Sharded by `UserId` hash (8 shards)
-- **UserSession**: Sharded by `UserId` hash (8 shards)
-- **UserActivity**: Sharded by `UserId` hash (8 shards)
-
-### Key Configuration
 ```csharp
-// In DbContext.OnModelCreating()
-modelBuilder.Entity<UserProfile>(entity =>
-{
-    entity.ShardByHash(u => u.UserId, shardCount: 8);
-});
+modelBuilder.Entity<Order>().ShardByDate(o => o.OrderDate, DateShardInterval.Year);
+
+dtde.AddShards("2023", "2024", "2025");
 ```
 
-### Use Cases
-- High-volume user data
-- Preventing hotspots from sequential IDs
-- Horizontal scaling with predictable distribution
-- Session management
+### Shard groups
 
----
+When two entities have **different shard topologies** in the same DbContext (e.g. eight hash buckets for users *and* three yearly buckets for orders), bind each to a named group:
 
-## 4. Multi-Tenant (`Dtde.Samples.MultiTenant`)
-
-Demonstrates **tenant-based sharding** for SaaS applications.
-
-### Entities
-- **Tenant**: Master lookup (not sharded)
-- **Project**: Sharded by `TenantId`
-- **ProjectTask**: Sharded by `TenantId` (co-located with projects)
-- **TaskComment**: Sharded by `TenantId` (co-located with tasks)
-
-### Key Configuration
 ```csharp
-// In DbContext.OnModelCreating()
-modelBuilder.Entity<Project>(entity =>
-{
-    entity.ShardBy(p => p.TenantId);
-});
+dtde => dtde
+    .AddShardGroup("hash8", g => g.AddShards("0","1","2","3","4","5","6","7"))
+    .AddShardGroup("years", g => g.AddShards("2023","2024","2025"));
+
+modelBuilder.Entity<UserProfile>().ShardByHash(u => u.UserId, 8).UseShardGroup("hash8");
+modelBuilder.Entity<Order>().ShardByDate(o => o.OrderDate).UseShardGroup("years");
 ```
 
-### Features
-- Tenant context middleware (extracts from header/route/query)
-- Complete data isolation per tenant
-- Co-located related entities for efficient joins
+Same local id in different groups (e.g. `"0"` in `hash8` vs `"0"` in `hash3`) refers to **different physical shards**. The `Combined` sample shows this in action.
 
-### Tenant Resolution
-- Header: `X-Tenant-Id: acme-corp`
-- Route: `/api/tenant/{tenantId}/projects`
-- Query: `?tenantId=acme-corp`
+### Cross-shard transactions (`Transactions` sample)
 
----
-
-## 5. Combined Strategies (`Dtde.Samples.Combined`)
-
-Demonstrates **multiple sharding strategies in one application** for complex enterprise scenarios.
-
-### Entities and Strategies
-| Entity | Strategy | Purpose |
-|--------|----------|---------|
-| Account | ShardBy(Region) | Data residency compliance |
-| AccountTransaction | ShardByDate(TransactionDate, Month) | Time-series partitioning |
-| RegulatoryDocument | ShardBy(DocumentType) | Logical grouping |
-| ComplianceAudit | ShardByHash(EntityReference, 8) | Even distribution |
-
-### Key Configuration
 ```csharp
-// In DbContext.OnModelCreating()
-modelBuilder.Entity<Account>(entity =>
+await using var tx = await db.BeginCrossShardTransactionAsync(new CrossShardTransactionOptions
 {
-    entity.ShardBy(a => a.Region);
+    IsolationLevel = CrossShardIsolationLevel.Serializable,
 });
 
-modelBuilder.Entity<AccountTransaction>(entity =>
-{
-    entity.ShardByDate(t => t.TransactionDate, DateShardInterval.Month);
-});
+var fromParticipant = await ((CrossShardTransaction)tx).GetOrCreateParticipantAsync(euShard);
+var toParticipant   = await ((CrossShardTransaction)tx).GetOrCreateParticipantAsync(usShard);
 
-modelBuilder.Entity<ComplianceAudit>(entity =>
-{
-    entity.ShardByHash(a => a.EntityReference, shardCount: 8);
-});
+fromParticipant.Context.Set<Account>().Update(sender);
+toParticipant.Context.Set<Account>().Update(receiver);
+
+await tx.CommitAsync(); // 2PC
 ```
 
-### Use Cases
-- Financial services with multi-region compliance
-- Banking systems with transaction history
-- Regulatory document management
-- Comprehensive audit trails
+**Savepoints** roll back partial work without ending the whole transaction:
 
----
+```csharp
+await participant.CreateSavepointAsync("bonus");
+// try optional work
+await participant.RollbackToSavepointAsync("bonus");
+// transaction stays open; only post-savepoint work was undone
+```
 
-## Running the Samples
+**Read-after-write** — queries inside the transaction see uncommitted writes on the same shard automatically.
 
-### Prerequisites
-- .NET 8.0+ / 9.0+ / 10.0+ SDK
-- SQLite (bundled with samples)
+**Crash-recovery log** — register an `ITransactionLog` (default in-memory; ship-included `FileBasedTransactionLog` for persistence) and call `coordinator.RecoverAsync()` on startup to drive any in-doubt transactions to a terminal state.
 
-### Build All Samples
+### Bulk operations (`BulkOperations` sample)
+
+```csharp
+await db.BulkInsertAsync(events);                  // routes per shard
+await db.BulkUpdateAsync<Event>(e => e.Type == "click",
+    setters => setters.SetProperty(e => e.Payload, "<redacted>"));   // EF 10
+await db.BulkDeleteAsync<Event>(e => e.CreatedAt < cutoff);
+
+await foreach (var ev in executor.ExecuteStreamingAsync(db.Set<Event>().AsQueryable()))
+{
+    // streams concurrently across all shards into a bounded channel
+}
+```
+
+Plug in `SqlBulkCopy` (SQL Server), PG `COPY`, etc. via:
+
+```csharp
+services.AddSingleton<IBulkInsertProvider, MyProviderSpecificBulkInsert>();
+```
+
+## Run any sample
+
 ```bash
-cd samples
-dotnet build
-```
-
-### Run Individual Sample
-```bash
-cd Dtde.Samples.HashSharding
+cd samples/Dtde.Samples.HashSharding
 dotnet run
+# Swagger UI at http://localhost:5000/swagger
 ```
 
-### Access Swagger UI
-Each sample exposes Swagger UI at `https://localhost:5001/swagger` when running.
-
----
-
-## Configuration Patterns
-
-### 1. Service Registration
-```csharp
-builder.Services.AddDtdeDbContext<YourDbContext>(
-    dbOptions => dbOptions.UseSqlite("Data Source=app.db"),
-    dtdeOptions =>
-    {
-        // Optional: Add pre-defined shards
-        dtdeOptions.AddShard(shardBuilder =>
-        {
-            shardBuilder.WithId("shard-1")
-                        .WithConnectionString("...");
-        });
-    });
-```
-
-### 2. Entity Configuration (Fluent API)
-```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder)
-{
-    base.OnModelCreating(modelBuilder);
-
-    modelBuilder.Entity<YourEntity>(entity =>
-    {
-        // Standard EF configuration
-        entity.HasKey(e => e.Id);
-        entity.Property(e => e.Name).IsRequired();
-
-        // DTDE sharding configuration
-        entity.ShardBy(e => e.ShardKey);
-        // OR
-        entity.ShardByDate(e => e.CreatedAt, DateShardInterval.Month);
-        // OR
-        entity.ShardByHash(e => e.UserId, shardCount: 8);
-    });
-}
-```
-
-### 3. DbContext Inheritance
-```csharp
-public class YourDbContext : DtdeDbContext
-{
-    public YourDbContext(DbContextOptions<YourDbContext> options)
-        : base(options)
-    {
-    }
-
-    public DbSet<YourEntity> Entities => Set<YourEntity>();
-}
-```
-
----
-
-## Sharding Method Reference
-
-| Method | Description | Example |
-|--------|-------------|---------|
-| `ShardBy<T, K>()` | Property-based sharding | `entity.ShardBy(e => e.Region)` |
-| `ShardByDate<T>()` | Date-based sharding | `entity.ShardByDate(e => e.Date, DateShardInterval.Month)` |
-| `ShardByHash<T, K>()` | Hash-based sharding | `entity.ShardByHash(e => e.UserId, shardCount: 8)` |
-
-### Date Shard Intervals
-- `DateShardInterval.Day` - Daily partitions
-- `DateShardInterval.Month` - Monthly partitions
-- `DateShardInterval.Quarter` - Quarterly partitions
-- `DateShardInterval.Year` - Yearly partitions
+The HTTP file alongside each sample (`api-tests.http`, where present) has ready-made requests for every endpoint.
