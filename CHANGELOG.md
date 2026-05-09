@@ -13,6 +13,64 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 > The migration is straightforward (5-10 lines per project); see "Migrating
 > from 1.0.0" below. The next published version number is to be decided.
 
+### Cross-shard transactions and bulk operations
+
+Three things landed for production-grade write paths.
+
+**1. The cross-shard coordinator now actually applies the configured
+isolation level.** Previously `CrossShardTransactionOptions.IsolationLevel`
+was parsed but each participant's `BeginTransactionAsync` was called
+without it, so every shard ran at the provider default. The coordinator's
+context-factory delegate is now a `ShardParticipantFactory` that returns
+both context *and* its open transaction — the EntityFramework layer
+constructs that delegate so it can call the relational
+`BeginTransactionAsync(IsolationLevel, CancellationToken)` overload
+without leaking a relational reference into `Dtde.Core`. In-memory
+providers fall back to the parameterless overload gracefully.
+
+**2. Group-qualified participant ids.** `EnlistAsync(IShardMetadata)`
+previously enlisted by the shard's *local* id; with shard groups, two
+shards in different groups sharing the same local id (e.g. `"0"` in
+`hash8` versus `"0"` in `hash3`) would alias to one participant. The
+coordinator now uses `IShardMetadata.ToQualifiedId()` (`group::id`)
+throughout, including the change-grouping dictionary in the transparent
+SaveChanges interceptor.
+
+**3. Single-shard fast path on commit.** A cross-shard transaction with
+exactly one enlisted participant skips the prepare phase — the underlying
+EF Core local transaction is already atomic, and 2PC adds nothing. Less
+overhead, same correctness.
+
+**New surface:**
+
+- **`DtdeDbContext.BeginCrossShardTransactionAsync(...)`** — the public
+  entry point for explicit cross-shard transactions. No need to inject
+  `ICrossShardTransactionCoordinator` directly.
+- **`DtdeDbContext.BulkInsertAsync(IEnumerable<TEntity>)`** — routes each
+  entity to its target shard, batches per shard, and commits all shards
+  together (2PC) when more than one is touched. Single-shard input takes
+  the fast path. Provider-agnostic; for very large batches you can plug a
+  per-shard `IShardContextFactory` into a provider-specific bulk path
+  (`SqlBulkCopy`, PG `COPY`, etc.) without changing the public surface.
+- **`DtdeDbContext.BulkDeleteAsync<TEntity>(predicate)`** — fans
+  `ExecuteDelete` across every shard in the entity's group. Set-based, no
+  `SELECT` round-trip, no change-tracker overhead.
+
+`BulkUpdate` is intentionally not a public extension method in this
+release: EF Core 7/8/9 use `SetPropertyCalls<T>` while EF Core 10 moved to
+`UpdateSettersBuilder<T>`. To run a cross-shard set-based update today,
+open `BeginCrossShardTransactionAsync` and call `ExecuteUpdateAsync` on
+each participant's context — that path is provider-version-stable.
+
+**MetadataRegistry now backfills sharding configuration from EF model
+annotations** (previously only temporal annotations were lifted). The
+write router and bulk operations rely on `IEntityMetadata.ShardingConfiguration`
+to route inserts to the right shard; without the backfill, annotation-only
+entities would have silently routed to the default-group hot shard. This
+fixes the routing bug for any consumer that uses `OnModelCreating` to
+declare `ShardBy*` (the recommended path) and didn't separately register
+the entity in the explicit metadata registry.
+
 ### Per-entity shard groups
 
 Different entities can now have different shard topologies inside the same

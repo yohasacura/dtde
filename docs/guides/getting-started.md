@@ -308,6 +308,74 @@ dtde => dtde.AddShardsFromConfig("shards.json");
 
 JSON schema in [Configuration reference](../wiki/configuration.md).
 
+### ...atomic writes across multiple shards (cross-shard transactions)
+
+`SaveChangesAsync` on the parent context auto-promotes to a cross-shard
+transaction when changes span multiple shards — that's transparent and
+nothing extra is required. For explicit control, open one yourself:
+
+```csharp
+await using var tx = await db.BeginCrossShardTransactionAsync();
+
+var euCtx = (await ((CrossShardTransaction)tx).GetOrCreateParticipantAsync(euShard)).Context;
+var usCtx = (await ((CrossShardTransaction)tx).GetOrCreateParticipantAsync(usShard)).Context;
+
+euCtx.Set<Customer>().Add(new Customer { Region = "EU", ... });
+usCtx.Set<Customer>().Add(new Customer { Region = "US", ... });
+
+await tx.CommitAsync();
+```
+
+DTDE runs a two-phase-commit (2PC) across the enlisted shards: prepare
+everywhere first, only commit if every shard votes yes. Disposing the
+transaction without committing rolls every participant back. With exactly
+one shard enlisted at commit time, DTDE skips the prepare phase
+(single-shard fast path) — same atomicity, less overhead.
+
+Tweak isolation, timeout, and retry behaviour via
+`CrossShardTransactionOptions`:
+
+```csharp
+var options = new CrossShardTransactionOptions
+{
+    IsolationLevel = CrossShardIsolationLevel.Serializable,
+    Timeout = TimeSpan.FromSeconds(15),
+};
+await using var tx = await db.BeginCrossShardTransactionAsync(options);
+```
+
+### ...high-throughput inserts and deletes (bulk operations)
+
+`BulkInsertAsync` routes each entity to its target shard, batches per
+shard, and commits all shards together (2PC) when more than one is
+touched:
+
+```csharp
+var newCustomers = new List<Customer>
+{
+    new() { Region = "EU", ... },
+    new() { Region = "US", ... },
+    new() { Region = "EU", ... },
+    // ...
+};
+
+var inserted = await db.BulkInsertAsync(newCustomers);
+```
+
+`BulkDeleteAsync` fans an `ExecuteDelete` out across every shard in the
+entity's shard group — set-based, no `SELECT` round-trip, no change
+tracker:
+
+```csharp
+var deleted = await db.BulkDeleteAsync<Customer>(c => c.LastSeen < cutoff);
+```
+
+For cross-shard `ExecuteUpdate` (the EF Core 7+ bulk-update API), open a
+cross-shard transaction yourself and call `ExecuteUpdateAsync` on each
+participant's context — the public extension method here is intentionally
+small because EF Core 8/9 use `SetPropertyCalls<T>` while EF Core 10
+moved to `UpdateSettersBuilder<T>`.
+
 ## The single canonical map
 
 | What | Where | API |
@@ -321,6 +389,8 @@ JSON schema in [Configuration reference](../wiki/configuration.md).
 | Per-shard table pattern | `OnModelCreating` | `entity.ShardBy(...).WithTablePattern("{Table}_{ShardId}")` |
 | Temporal validity | `OnModelCreating` | `entity.HasTemporalValidity(...)` |
 | Queries | application code | standard LINQ + `db.ValidAt<T>(...)` |
+| Cross-shard transactions | application code | `await using var tx = await db.BeginCrossShardTransactionAsync()` |
+| Bulk insert / delete | application code | `db.BulkInsertAsync(entities)` / `db.BulkDeleteAsync<T>(predicate)` |
 
 ## Next steps
 

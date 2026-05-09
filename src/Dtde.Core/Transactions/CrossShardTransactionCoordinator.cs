@@ -55,7 +55,7 @@ namespace Dtde.Core.Transactions;
 public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoordinator
 {
     private readonly IShardRegistry _shardRegistry;
-    private readonly Func<string, CancellationToken, Task<DbContext>> _contextFactory;
+    private readonly ShardParticipantFactory _participantFactory;
     private readonly ILogger<CrossShardTransactionCoordinator> _logger;
     private readonly ILogger<CrossShardTransaction> _transactionLogger;
     private readonly AsyncLocal<ICrossShardTransaction?> _currentTransaction = new();
@@ -64,17 +64,17 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
     /// Initializes a new instance of the <see cref="CrossShardTransactionCoordinator"/> class.
     /// </summary>
     /// <param name="shardRegistry">The shard registry.</param>
-    /// <param name="contextFactory">Factory for creating DbContext instances for shards.</param>
+    /// <param name="participantFactory">Factory that materialises a per-shard context and starts its local transaction with the requested isolation level.</param>
     /// <param name="logger">The logger for the coordinator.</param>
     /// <param name="transactionLogger">The logger for transactions.</param>
     public CrossShardTransactionCoordinator(
         IShardRegistry shardRegistry,
-        Func<string, CancellationToken, Task<DbContext>> contextFactory,
+        ShardParticipantFactory participantFactory,
         ILogger<CrossShardTransactionCoordinator> logger,
         ILogger<CrossShardTransaction> transactionLogger)
     {
         _shardRegistry = shardRegistry ?? throw new ArgumentNullException(nameof(shardRegistry));
-        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        _participantFactory = participantFactory ?? throw new ArgumentNullException(nameof(participantFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _transactionLogger = transactionLogger ?? throw new ArgumentNullException(nameof(transactionLogger));
     }
@@ -111,7 +111,7 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
             transactionId,
             options,
             _shardRegistry,
-            _contextFactory,
+            _participantFactory,
             _transactionLogger);
 
         _currentTransaction.Value = transaction;

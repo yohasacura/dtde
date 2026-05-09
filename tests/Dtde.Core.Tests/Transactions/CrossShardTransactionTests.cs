@@ -197,7 +197,7 @@ public class CrossShardTransactionTests
             transactionId,
             options ?? _defaultOptions,
             _shardRegistry,
-            (shardId, ct) => throw new NotSupportedException("Context factory not configured for this test"),
+            (shardId, isolationLevel, ct) => throw new NotSupportedException("Participant factory not configured for this test"),
             _logger);
     }
 
@@ -207,15 +207,18 @@ public class CrossShardTransactionTests
             transactionId,
             options ?? _defaultOptions,
             _shardRegistry,
-            async (shardId, ct) =>
+            async (shardId, isolationLevel, ct) =>
             {
                 var optionsBuilder = new DbContextOptionsBuilder<TestDbContext>();
                 optionsBuilder.UseInMemoryDatabase($"Test_{shardId}_{transactionId}")
                     .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning));
                 var context = new TestDbContext(optionsBuilder.Options);
 
-                // In-memory database doesn't support transactions, but we can still test the flow
-                return context;
+                // In-memory provider has no real transactions; the mock returns
+                // the parameterless transaction (a no-op) so the participant
+                // wiring still completes.
+                var transaction = await context.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+                return (context, transaction);
             },
             _logger);
     }
