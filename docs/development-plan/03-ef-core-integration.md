@@ -402,9 +402,9 @@ public static class EntityTypeBuilderExtensions
 ```
 
 The implementations live in
-[`src/Dtde.EntityFramework/Extensions/EntityTypeBuilderExtensions.cs`](../../src/Dtde.EntityFramework/Extensions/EntityTypeBuilderExtensions.cs)
+[`src/Dtde.EntityFramework/Extensions/EntityTypeBuilderExtensions.cs`](https://github.com/yohasacura/dtde/blob/main/src/Dtde.EntityFramework/Extensions/EntityTypeBuilderExtensions.cs)
 and write metadata via `DtdeAnnotationNames` constants on the EF model. The
-chained builder type [`ShardingBuilder<TEntity>`](../../src/Dtde.EntityFramework/Configuration/ShardingBuilder.cs)
+chained builder type [`ShardingBuilder<TEntity>`](https://github.com/yohasacura/dtde/blob/main/src/Dtde.EntityFramework/Configuration/ShardingBuilder.cs)
 exposes `WithStorageMode`, `WithTablePattern`, `WithoutMigrations`, and
 `AddDatabase` for advanced storage scenarios.
 
