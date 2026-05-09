@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Dtde.Abstractions.Metadata;
 using Dtde.EntityFramework.Configuration;
 
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -11,19 +12,21 @@ namespace Dtde.EntityFramework.Infrastructure;
 
 /// <summary>
 /// EF Core options extension that carries DTDE configuration plus the
-/// active shard id (when this DbContext represents a single shard).
+/// active shard (when this DbContext represents a single shard).
 /// </summary>
 /// <remarks>
 /// One <see cref="DtdeOptionsExtension"/> instance lives on the parent
-/// DbContext (with <see cref="ActiveShardId"/> = <see langword="null"/>) and
-/// one is cloned per shard with that shard's id. The model customizer and
-/// model cache key factory read <see cref="ActiveShardId"/> to build a
-/// distinct EF model per shard with shard-specific table names.
+/// DbContext (with <see cref="ActiveShard"/> = <see langword="null"/>) and
+/// one is cloned per shard with that shard's metadata. The model customizer
+/// and model cache key factory read <see cref="ActiveShard"/> to build a
+/// distinct EF model per shard with shard-specific table names — scoped to
+/// the active shard's <see cref="IShardMetadata.GroupName"/> so entities
+/// bound to other groups are excluded from the per-shard model.
 /// </remarks>
 public sealed class DtdeOptionsExtension : IDbContextOptionsExtension
 {
     private DtdeOptions _options = new();
-    private string? _activeShardId;
+    private IShardMetadata? _activeShard;
     private ExtensionInfo? _info;
 
     /// <summary>
@@ -36,7 +39,7 @@ public sealed class DtdeOptionsExtension : IDbContextOptionsExtension
     private DtdeOptionsExtension(DtdeOptionsExtension copyFrom)
     {
         _options = copyFrom._options;
-        _activeShardId = copyFrom._activeShardId;
+        _activeShard = copyFrom._activeShard;
     }
 
     /// <summary>
@@ -45,12 +48,25 @@ public sealed class DtdeOptionsExtension : IDbContextOptionsExtension
     public DtdeOptions Options => _options;
 
     /// <summary>
-    /// Gets the active shard id for this DbContext, or <see langword="null"/>
+    /// Gets the active shard for this DbContext, or <see langword="null"/>
     /// if this is the parent (unsharded) context. Per-shard contexts have a
     /// non-null value, and DTDE rewrites the EF model accordingly so that
-    /// <c>Customers</c> becomes <c>Customers_EU</c>, etc.
+    /// <c>Customers</c> becomes <c>Customers_EU</c>, etc. — and so that
+    /// entities bound to other groups are excluded from the model.
     /// </summary>
-    public string? ActiveShardId => _activeShardId;
+    public IShardMetadata? ActiveShard => _activeShard;
+
+    /// <summary>
+    /// Convenience: the active shard's id (within its group), or
+    /// <see langword="null"/> for the parent context.
+    /// </summary>
+    public string? ActiveShardId => _activeShard?.ShardId;
+
+    /// <summary>
+    /// Convenience: the active shard's group name, or <see langword="null"/>
+    /// for the parent context.
+    /// </summary>
+    public string? ActiveShardGroup => _activeShard?.GroupName;
 
     /// <inheritdoc />
     public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
@@ -65,13 +81,13 @@ public sealed class DtdeOptionsExtension : IDbContextOptionsExtension
     }
 
     /// <summary>
-    /// Returns a clone tagged with the given active shard id. Used by
+    /// Returns a clone tagged with the given active shard. Used by
     /// <see cref="Dtde.EntityFramework.Query.PerShardContextFactory{TContext}"/>
     /// when materialising a per-shard DbContext.
     /// </summary>
-    public DtdeOptionsExtension WithActiveShardId(string? shardId)
+    public DtdeOptionsExtension WithActiveShard(IShardMetadata? shard)
     {
-        return new DtdeOptionsExtension(this) { _activeShardId = shardId };
+        return new DtdeOptionsExtension(this) { _activeShard = shard };
     }
 
     /// <inheritdoc />
@@ -105,31 +121,63 @@ public sealed class DtdeOptionsExtension : IDbContextOptionsExtension
         public override bool IsDatabaseProvider => false;
 
         public override string LogFragment =>
-            Extension._activeShardId is null
+            Extension._activeShard is null
                 ? "using DTDE "
-                : $"using DTDE shard '{Extension._activeShardId}' ";
+                : $"using DTDE shard '{Extension._activeShard.GroupName}/{Extension._activeShard.ShardId}' ";
 
         // ApplyServices doesn't depend on per-options data anymore, so all
         // DTDE-using DbContexts share a single internal EF service provider
-        // (just keyed by ActiveShardId — different shards still need their
+        // (just keyed by group + shard id — different shards still need their
         // own model cache, but the underlying DI services are identical).
         public override int GetServiceProviderHashCode()
-            => Extension._activeShardId?.GetHashCode(StringComparison.Ordinal) ?? 0;
+        {
+            if (Extension._activeShard is null)
+            {
+                return 0;
+            }
+
+            return HashCode.Combine(
+                Extension._activeShard.GroupName,
+                Extension._activeShard.ShardId);
+        }
 
         public override bool ShouldUseSameServiceProvider(DbContextOptionsExtensionInfo other)
-            => other is ExtensionInfo info
-                && Extension._activeShardId == info.Extension._activeShardId;
+        {
+            if (other is not ExtensionInfo info)
+            {
+                return false;
+            }
+
+            var a = Extension._activeShard;
+            var b = info.Extension._activeShard;
+
+            if (a is null && b is null)
+            {
+                return true;
+            }
+
+            if (a is null || b is null)
+            {
+                return false;
+            }
+
+            return string.Equals(a.GroupName, b.GroupName, StringComparison.Ordinal)
+                && string.Equals(a.ShardId, b.ShardId, StringComparison.Ordinal);
+        }
 
         public override void PopulateDebugInfo(IDictionary<string, string> debugInfo)
         {
             debugInfo["DTDE:Enabled"] = "true";
             debugInfo["DTDE:ShardCount"] = Extension._options.ShardRegistry.GetAllShards().Count
                 .ToString(CultureInfo.InvariantCulture);
+            debugInfo["DTDE:GroupCount"] = Extension._options.ShardGroupRegistry.Groups.Count
+                .ToString(CultureInfo.InvariantCulture);
             debugInfo["DTDE:EntityCount"] = Extension._options.MetadataRegistry.GetAllEntityMetadata().Count
                 .ToString(CultureInfo.InvariantCulture);
-            if (Extension._activeShardId is not null)
+            if (Extension._activeShard is not null)
             {
-                debugInfo["DTDE:ActiveShardId"] = Extension._activeShardId;
+                debugInfo["DTDE:ActiveShardGroup"] = Extension._activeShard.GroupName;
+                debugInfo["DTDE:ActiveShardId"] = Extension._activeShard.ShardId;
             }
         }
     }

@@ -220,6 +220,49 @@ dtde => dtde.AddShards("0", "1", "2", "3", "4", "5", "6", "7")
 
 DTDE computes the user-id hash modulo 8 to pick the shard.
 
+### ...different shard topologies for different entities — **shard groups**
+
+The example above works only because every entity in the DbContext shares the
+same shard topology. The moment you have two entities with different shard
+counts — say, eight hash buckets for users *and* three yearly buckets for
+orders — you need to tell DTDE which shards belong to which entity. That's
+what shard groups are for.
+
+A **shard group** is a named set of shards. Entities pick the group they live
+on; shard ids are unique *within* a group, so `"0"` in a `hash8` group is a
+different physical shard from `"0"` in a `hash3` group.
+
+```csharp
+// Program.cs
+builder.Services.AddDtdeDbContext<AppDbContext>(
+    (db, conn) => db.UseSqlite(conn ?? "Data Source=app.db"),
+    dtde => dtde
+        .AddShardGroup("hash8",  g => g.AddShards("0","1","2","3","4","5","6","7"))
+        .AddShardGroup("years",  g => g.AddShards("2023","2024","2025")));
+
+// AppDbContext.OnModelCreating
+modelBuilder.Entity<UserProfile>()
+    .ShardByHash(u => u.UserId, 8)
+    .UseShardGroup("hash8");
+
+modelBuilder.Entity<Order>()
+    .ShardByDate(o => o.OrderDate, DateShardInterval.Year)
+    .UseShardGroup("years");
+```
+
+Per group, all the rules from the rest of the guide apply: `AddShards` puts
+the shards in **table-mode** (one DB, per-shard tables); `AddShard(id, conn)`
+puts them in **database-mode** (one DB per shard); `AddTableShardInDatabase`
+gives you mixed-mode (per-shard tables across multiple databases). Each
+group has its own table-mode / database-mode / mixed-mode choice — they
+don't have to agree.
+
+Default-group rule keeps the simple case simple: if you don't call
+`AddShardGroup` and don't call `UseShardGroup`, every shard goes into the
+implicit default group and every entity binds to it. The original
+`AddShards("EU","US","APAC")` + `entity.ShardBy(c => c.Region)` example
+above still works without any changes.
+
 ### ...point-in-time queries (temporal entities)
 
 Add `ValidFrom`/`ValidTo` properties on the entity, declare them in
@@ -271,8 +314,10 @@ JSON schema in [Configuration reference](../wiki/configuration.md).
 |---|---|---|
 | DI registration | `Program.cs` | `services.AddDtdeDbContext<TContext>((db, conn) => ..., dtde => ...)` |
 | Provisioning | startup | `db.EnsureAllShardsCreatedAsync()` |
-| Shard list | inside `dtde` callback | `dtde.AddShards(...)` / `dtde.AddShard(id[, conn])` / `dtde.AddShard(s => ...)` |
+| Shard list (default group) | inside `dtde` callback | `dtde.AddShards(...)` / `dtde.AddShard(id[, conn])` / `dtde.AddShard(s => ...)` |
+| Named shard groups | inside `dtde` callback | `dtde.AddShardGroup("name", g => g.AddShards(...))` |
 | Entity sharding | `OnModelCreating` | `entity.ShardBy(...)` / `ShardByDate(...)` / `ShardByHash(...)` |
+| Bind entity to shard group | `OnModelCreating` | `entity.ShardBy(...).UseShardGroup("name")` |
 | Per-shard table pattern | `OnModelCreating` | `entity.ShardBy(...).WithTablePattern("{Table}_{ShardId}")` |
 | Temporal validity | `OnModelCreating` | `entity.HasTemporalValidity(...)` |
 | Queries | application code | standard LINQ + `db.ValidAt<T>(...)` |

@@ -12,6 +12,8 @@ namespace Dtde.EntityFramework.Query;
 /// <summary>
 /// Executes queries across multiple shards and merges results.
 /// Supports both database-level and table-level sharding modes.
+/// Per-entity fan-out is scoped to the entity's
+/// <see cref="IShardingConfiguration.ShardGroupName">shard group</see>.
 /// </summary>
 /// <example>
 /// <code>
@@ -26,6 +28,7 @@ namespace Dtde.EntityFramework.Query;
 public sealed class ShardedQueryExecutor : IShardedQueryExecutor
 {
     private readonly IShardRegistry _shardRegistry;
+    private readonly IShardGroupRegistry _shardGroupRegistry;
     private readonly IMetadataRegistry _metadataRegistry;
     private readonly ITemporalContext _temporalContext;
     private readonly IShardContextFactory _shardContextFactory;
@@ -34,19 +37,22 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
     /// <summary>
     /// Initializes a new instance of the <see cref="ShardedQueryExecutor"/> class.
     /// </summary>
-    /// <param name="shardRegistry">The shard registry.</param>
+    /// <param name="shardRegistry">The flat shard registry.</param>
+    /// <param name="shardGroupRegistry">The shard-group registry.</param>
     /// <param name="metadataRegistry">The metadata registry.</param>
     /// <param name="temporalContext">The temporal context.</param>
     /// <param name="shardContextFactory">The shard context factory.</param>
     /// <param name="logger">The logger.</param>
     public ShardedQueryExecutor(
         IShardRegistry shardRegistry,
+        IShardGroupRegistry shardGroupRegistry,
         IMetadataRegistry metadataRegistry,
         ITemporalContext temporalContext,
         IShardContextFactory shardContextFactory,
         ILogger<ShardedQueryExecutor> logger)
     {
         _shardRegistry = shardRegistry ?? throw new ArgumentNullException(nameof(shardRegistry));
+        _shardGroupRegistry = shardGroupRegistry ?? throw new ArgumentNullException(nameof(shardGroupRegistry));
         _metadataRegistry = metadataRegistry ?? throw new ArgumentNullException(nameof(metadataRegistry));
         _temporalContext = temporalContext ?? throw new ArgumentNullException(nameof(temporalContext));
         _shardContextFactory = shardContextFactory ?? throw new ArgumentNullException(nameof(shardContextFactory));
@@ -108,15 +114,30 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
 
     /// <summary>
     /// Determines target shards based on entity metadata and query predicates.
+    /// Fan-out is scoped to the entity's shard group — never crosses groups.
     /// </summary>
     private IEnumerable<IShardMetadata> DetermineTargetShards(Type entityType, Expression expression)
     {
         var metadata = _metadataRegistry.GetEntityMetadata(entityType);
         if (metadata?.ShardingConfiguration is null)
         {
-            // Not sharded - return primary shard
-            return _shardRegistry.GetAllShards().Where(s => s.Tier == ShardTier.Hot).Take(1);
+            // Not sharded - return primary shard from default group.
+            return _shardGroupRegistry.DefaultGroup.Shards
+                .Where(s => s.Tier == ShardTier.Hot)
+                .Take(1);
         }
+
+        var groupName = metadata.ShardingConfiguration.ShardGroupName;
+        // The entity declared a group that wasn't registered. Fail fast here
+        // rather than silently fanning out to nothing — the application
+        // configuration is wrong.
+        var group = _shardGroupRegistry.FindGroup(groupName)
+            ?? throw new InvalidOperationException(
+                $"Entity '{entityType.Name}' is bound to shard group '{groupName}', but no such " +
+                "group is registered. Add it with dtde.AddShardGroup(...) or remove the " +
+                "UseShardGroup(...) call on the entity.");
+
+        var groupShards = group.Shards;
 
         // Extract predicates from query expression
         var predicates = ExtractPredicates(expression);
@@ -124,25 +145,21 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
         // Extract temporal context from expression
         var temporalInfo = ExtractTemporalInfo(expression);
 
-        // First try date-based resolution
+        // First try date-based resolution (within this entity's group only).
         if (temporalInfo.AsOfDate.HasValue)
         {
-            return _shardRegistry.GetShardsForDateRange(
-                temporalInfo.AsOfDate.Value,
-                temporalInfo.AsOfDate.Value);
+            return FilterByDateRange(groupShards, temporalInfo.AsOfDate.Value, temporalInfo.AsOfDate.Value);
         }
 
         if (temporalInfo.RangeStart.HasValue && temporalInfo.RangeEnd.HasValue)
         {
-            return _shardRegistry.GetShardsForDateRange(
-                temporalInfo.RangeStart.Value,
-                temporalInfo.RangeEnd.Value);
+            return FilterByDateRange(groupShards, temporalInfo.RangeStart.Value, temporalInfo.RangeEnd.Value);
         }
 
-        // Then try shard key predicate matching
+        // Then try shard key predicate matching (within this entity's group only).
         if (predicates.Count > 0)
         {
-            var matchingShards = _shardRegistry.GetAllShards()
+            var matchingShards = groupShards
                 .Where(s => MatchesShardPredicate(s, predicates))
                 .ToList();
 
@@ -152,8 +169,17 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
             }
         }
 
-        // No temporal or key constraints - return all active shards
-        return _shardRegistry.GetAllShards().Where(s => s.IsActive);
+        // No temporal or key constraints - return all active shards in the group.
+        return groupShards.Where(s => s.IsActive);
+    }
+
+    private static IEnumerable<IShardMetadata> FilterByDateRange(
+        IReadOnlyList<IShardMetadata> shards,
+        DateTime startDate,
+        DateTime endDate)
+    {
+        var queryRange = new DateRange(startDate, endDate);
+        return shards.Where(s => s.DateRange is null || s.DateRange.Value.Intersects(queryRange));
     }
 
     /// <summary>

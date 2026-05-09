@@ -445,6 +445,7 @@ public class HashShardingStrategyTests
         public bool MigrationsEnabled => false;
         public string? TableNamePattern => null;
         public DateShardInterval? DateInterval => null;
+        public string ShardGroupName => IShardGroupRegistry.DefaultGroupName;
     }
 
     private sealed class TestEmptyShardKeyConfiguration : IShardingConfiguration
@@ -457,6 +458,7 @@ public class HashShardingStrategyTests
         public bool MigrationsEnabled => false;
         public string? TableNamePattern => null;
         public DateShardInterval? DateInterval => null;
+        public string ShardGroupName => IShardGroupRegistry.DefaultGroupName;
     }
 
     private sealed class TestPropertyMetadata : IPropertyMetadata

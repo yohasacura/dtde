@@ -135,6 +135,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(options);
         services.AddSingleton<IMetadataRegistry>(options.MetadataRegistry);
         services.AddSingleton<IShardRegistry>(options.ShardRegistry);
+        services.AddSingleton<IShardGroupRegistry>(options.ShardGroupRegistry);
         services.AddSingleton<ITemporalContext>(options.TemporalContext);
 
         services.AddScoped<IExpressionRewriter, DtdeExpressionRewriter>();

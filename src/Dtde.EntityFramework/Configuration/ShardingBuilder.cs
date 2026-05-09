@@ -63,6 +63,40 @@ public sealed class ShardingBuilder<TEntity>
     }
 
     /// <summary>
+    /// Binds this entity to a named shard group. Required when different
+    /// entities have different shard topologies — for example, eight hash
+    /// buckets for users and three yearly buckets for orders. Entities that
+    /// don't call this method fall through to the conventional default group.
+    /// </summary>
+    /// <param name="groupName">The shard group's name; must match an
+    /// <c>AddShardGroup</c> call in the DI configuration.</param>
+    /// <returns>The builder for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// // Program.cs
+    /// dtde => dtde
+    ///     .AddShardGroup("hash8", g =&gt; g.AddShards("0","1","2","3","4","5","6","7"))
+    ///     .AddShardGroup("years", g =&gt; g.AddShards("2023","2024","2025"));
+    ///
+    /// // OnModelCreating
+    /// modelBuilder.Entity&lt;UserProfile&gt;()
+    ///     .ShardByHash(u =&gt; u.UserId, 8)
+    ///     .UseShardGroup("hash8");
+    ///
+    /// modelBuilder.Entity&lt;Order&gt;()
+    ///     .ShardByDate(o =&gt; o.OrderDate, DateShardInterval.Year)
+    ///     .UseShardGroup("years");
+    /// </code>
+    /// </example>
+    public ShardingBuilder<TEntity> UseShardGroup(string groupName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(groupName);
+
+        _builder.Metadata.SetAnnotation(DtdeAnnotationNames.ShardGroupName, groupName);
+        return this;
+    }
+
+    /// <summary>
     /// Returns the underlying <see cref="EntityTypeBuilder{TEntity}"/>.
     /// </summary>
     public EntityTypeBuilder<TEntity> ToEntityTypeBuilder() => _builder;

@@ -527,6 +527,7 @@ public class MetadataRegistryTests
         public bool MigrationsEnabled => false;
         public string? TableNamePattern => null;
         public DateShardInterval? DateInterval => null;
+        public string ShardGroupName => IShardGroupRegistry.DefaultGroupName;
     }
 
     private sealed class TestPropertyMetadata : IPropertyMetadata

@@ -68,6 +68,14 @@ public sealed class DtdeOptions
     public IShardRegistry ShardRegistry { get; set; } = new ShardRegistry();
 
     /// <summary>
+    /// Gets or sets the shard-group registry. The group registry partitions
+    /// the flat <see cref="ShardRegistry"/> by
+    /// <see cref="IShardMetadata.GroupName"/>, so per-entity fan-out can be
+    /// scoped to the entity's group.
+    /// </summary>
+    public IShardGroupRegistry ShardGroupRegistry { get; set; } = new ShardGroupRegistry();
+
+    /// <summary>
     /// Gets or sets the temporal context.
     /// </summary>
     public ITemporalContext TemporalContext { get; set; } = new TemporalContext();

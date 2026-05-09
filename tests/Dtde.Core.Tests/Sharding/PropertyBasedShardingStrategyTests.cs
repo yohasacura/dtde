@@ -263,6 +263,7 @@ public class PropertyBasedShardingStrategyTests
         public bool MigrationsEnabled => false;
         public string? TableNamePattern => null;
         public DateShardInterval? DateInterval => null;
+        public string ShardGroupName => IShardGroupRegistry.DefaultGroupName;
     }
 
     /// <summary>

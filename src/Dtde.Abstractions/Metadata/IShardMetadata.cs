@@ -111,10 +111,22 @@ public readonly record struct KeyRange
 public interface IShardMetadata
 {
     /// <summary>
-    /// Gets the unique shard identifier.
+    /// Gets the shard's identifier — unique <em>within its group</em>.
+    /// Two shards in different <see cref="GroupName">groups</see> may share the
+    /// same <see cref="ShardId"/> (for example, both <c>"hash8"</c> and
+    /// <c>"hash3"</c> may contain a shard with id <c>"0"</c>).
     /// </summary>
     /// <example>Orders_2024, Customers_EU, Shard_003</example>
     public string ShardId { get; }
+
+    /// <summary>
+    /// Gets the name of the shard group this shard belongs to. Entities pick
+    /// which group's shards they live on via
+    /// <c>ShardingBuilder&lt;T&gt;.UseShardGroup(string)</c>; if neither the
+    /// shard nor the entity declares a group, both fall through to
+    /// <c>"__default__"</c>.
+    /// </summary>
+    public string GroupName { get; }
 
     /// <summary>
     /// Gets the display name for logging and diagnostics.

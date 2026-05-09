@@ -18,8 +18,9 @@ public static class DtdeDbContextExtensions
     /// <summary>
     /// Calls <see cref="DatabaseFacade.EnsureCreatedAsync(CancellationToken)"/>
     /// on the parent context and then on a fresh per-shard context for every
-    /// registered shard. Use during application startup, sample bootstrap, or
-    /// integration tests to make sure every shard's tables / databases exist.
+    /// registered shard, walking each <see cref="IShardGroup"/> in turn. Use
+    /// during application startup, sample bootstrap, or integration tests to
+    /// make sure every shard's tables / databases exist.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -28,10 +29,11 @@ public static class DtdeDbContextExtensions
     /// </para>
     /// <para>
     /// In <strong>table-mode</strong>, all per-shard contexts share the parent
-    /// connection. Each per-shard context's model has the entity mapped to a
-    /// shard-specific table name (e.g. <c>Customers_EU</c>), so
-    /// <c>EnsureCreatedAsync</c> creates those tables alongside the parent's
-    /// non-sharded tables.
+    /// connection. Each per-shard context's model has the in-group entity
+    /// mapped to a shard-specific table name (e.g. <c>Customers_EU</c>), and
+    /// out-of-group entities removed from the model — so
+    /// <c>CreateTablesAsync</c> only creates tables that actually belong on
+    /// that shard.
     /// </para>
     /// </remarks>
     /// <param name="context">The parent DTDE-aware DbContext.</param>
@@ -47,51 +49,57 @@ public static class DtdeDbContextExtensions
         // in table-mode, the file/database that holds the shard tables.
         await context.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
 
-        // Read shard list from the extension (single source of truth) rather
-        // than the EF-Core internal service provider.
+        // Read shards via the group registry so each shard is provisioned in
+        // the context of its group (per-shard model has only that group's
+        // entities; out-of-group entities are excluded by the model
+        // customizer).
         var extension = context.GetService<IDbContextOptions>().FindExtension<DtdeOptionsExtension>()
             ?? throw new InvalidOperationException(
                 "DTDE is not configured on this DbContext. Did you call AddDtdeDbContext or UseDtde?");
-        var shardRegistry = extension.Options.ShardRegistry;
+
+        var groupRegistry = extension.Options.ShardGroupRegistry;
 
         var contextFactory = context.GetService<IShardContextFactory>()
             ?? throw new InvalidOperationException(
                 "No IShardContextFactory is registered. Use AddDtdeDbContext to wire one automatically.");
 
-        foreach (var shard in shardRegistry.GetAllShards())
+        foreach (var group in groupRegistry.Groups)
         {
-            await using var shardContext = await contextFactory
-                .CreateContextAsync(shard, cancellationToken)
-                .ConfigureAwait(false);
-
-            // Database-mode shards: each has its own underlying database;
-            // EnsureCreated does the right thing.
-            //
-            // Table-mode shards (and Manual): the database already exists from
-            // the parent context, so EnsureCreatedAsync would no-op. We force
-            // table creation via the relational creator's CreateTablesAsync,
-            // which honours the per-shard model (with the shard-specific
-            // table names baked in by DtdeShardModelCustomizer).
-            if (shard.StorageMode == ShardStorageMode.Databases)
+            foreach (var shard in group.Shards)
             {
-                await shardContext.Database
-                    .EnsureCreatedAsync(cancellationToken)
+                await using var shardContext = await contextFactory
+                    .CreateContextAsync(shard, cancellationToken)
                     .ConfigureAwait(false);
-            }
-            else
-            {
-                if (shardContext.GetService<IDatabaseCreator>() is IRelationalDatabaseCreator relationalCreator)
+
+                // Database-mode shards: each has its own underlying database;
+                // EnsureCreated does the right thing.
+                //
+                // Table-mode shards (and Manual): the database already exists from
+                // the parent context, so EnsureCreatedAsync would no-op. We force
+                // table creation via the relational creator's CreateTablesAsync,
+                // which honours the per-shard model (with the shard-specific
+                // table names baked in by DtdeShardModelCustomizer).
+                if (shard.StorageMode == ShardStorageMode.Databases)
                 {
-                    await relationalCreator
-                        .CreateTablesAsync(cancellationToken)
+                    await shardContext.Database
+                        .EnsureCreatedAsync(cancellationToken)
                         .ConfigureAwait(false);
                 }
                 else
                 {
-                    // Non-relational (in-memory) provider: fall back to EnsureCreated.
-                    await shardContext.Database
-                        .EnsureCreatedAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                    if (shardContext.GetService<IDatabaseCreator>() is IRelationalDatabaseCreator relationalCreator)
+                    {
+                        await relationalCreator
+                            .CreateTablesAsync(cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        // Non-relational (in-memory) provider: fall back to EnsureCreated.
+                        await shardContext.Database
+                            .EnsureCreatedAsync(cancellationToken)
+                            .ConfigureAwait(false);
+                    }
                 }
             }
         }

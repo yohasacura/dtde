@@ -611,9 +611,11 @@ public sealed class TransparentShardingInterceptor : SaveChangesInterceptor, IDb
 
             hasShardedEntities = true;
 
-            // Determine the target shard for this entity
+            // Determine the target shard for this entity. Use the
+            // fully-qualified id so two groups that happen to share a local id
+            // (e.g. "0" in hash8 and "0" in hash3) don't collide.
             var targetShard = DetermineTargetShardForEntry(entry, writeRouter);
-            AddToShardGroup(shardGroups, targetShard.ShardId, entry);
+            AddToShardGroup(shardGroups, targetShard.ToQualifiedId(), entry);
         }
 
         // If we have more than one shard group, we need cross-shard transaction
@@ -788,7 +790,7 @@ public sealed class TransparentShardingInterceptor : SaveChangesInterceptor, IDb
     {
         var shardRegistry = _serviceProvider.GetService<IShardRegistry>();
         return shardRegistry?.GetAllShards()
-            .FirstOrDefault(s => s.Tier == ShardTier.Hot)?.ShardId;
+            .FirstOrDefault(s => s.Tier == ShardTier.Hot)?.ToQualifiedId();
     }
 
     #endregion
@@ -856,14 +858,14 @@ public sealed class TransparentShardingInterceptor : SaveChangesInterceptor, IDb
                 string targetShardId;
                 if (metadata?.ShardingConfiguration is null)
                 {
-                    // Non-sharded entity - use default hot shard
+                    // Non-sharded entity - use default hot shard.
                     targetShardId = _shardRegistry.GetAllShards()
-                        .FirstOrDefault(s => s.Tier == ShardTier.Hot)?.ShardId ?? "_default_";
+                        .FirstOrDefault(s => s.Tier == ShardTier.Hot)?.ToQualifiedId() ?? "_default_";
                 }
                 else
                 {
                     var targetShard = DetermineTargetShardForEntry(entry, _writeRouter);
-                    targetShardId = targetShard.ShardId;
+                    targetShardId = targetShard.ToQualifiedId();
                 }
 
                 if (!shardGroups.TryGetValue(targetShardId, out var list))
