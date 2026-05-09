@@ -1,5 +1,6 @@
 using Dtde.Samples.Combined.Data;
 using Dtde.Samples.Combined.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -151,7 +152,7 @@ public class TransactionsController : ControllerBase
         var account = await _context.Accounts
             .FirstOrDefaultAsync(a => a.AccountNumber == request.AccountNumber);
 
-        if (account == null)
+        if (account is null)
             return NotFound($"Account {request.AccountNumber} not found");
 
         var balanceBefore = account.Balance;

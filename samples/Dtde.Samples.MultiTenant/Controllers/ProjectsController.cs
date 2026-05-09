@@ -1,6 +1,7 @@
 using Dtde.Samples.MultiTenant.Data;
 using Dtde.Samples.MultiTenant.Entities;
 using Dtde.Samples.MultiTenant.Services;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -74,7 +75,7 @@ public class ProjectsController : ControllerBase
             .Where(p => p.TenantId == tenantId && p.Id == projectId)
             .FirstOrDefaultAsync();
 
-        if (project == null)
+        if (project is null)
             return NotFound();
 
         var taskCounts = await _context.Tasks
@@ -144,14 +145,14 @@ public class ProjectsController : ControllerBase
             .Where(p => p.TenantId == tenantId && p.Id == projectId)
             .FirstOrDefaultAsync();
 
-        if (project == null)
+        if (project is null)
             return NotFound();
 
-        if (request.Name != null)
+        if (request.Name is not null)
             project.Name = request.Name;
-        if (request.Description != null)
+        if (request.Description is not null)
             project.Description = request.Description;
-        if (request.Status != null)
+        if (request.Status is not null)
         {
             project.Status = request.Status;
             if (request.Status == "Archived")
@@ -187,7 +188,7 @@ public class ProjectsController : ControllerBase
             .Where(p => p.TenantId == tenantId && p.Id == projectId)
             .FirstOrDefaultAsync();
 
-        if (project == null)
+        if (project is null)
             return NotFound();
 
         // Soft delete

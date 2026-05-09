@@ -1,5 +1,6 @@
 using Dtde.Samples.HashSharding.Data;
 using Dtde.Samples.HashSharding.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -57,10 +58,7 @@ public class SessionsController : ControllerBase
 
         // Update user's last login (same shard, efficient)
         var user = await _context.UserProfiles.FirstOrDefaultAsync(u => u.UserId == request.UserId);
-        if (user != null)
-        {
-            user.LastLoginAt = DateTime.UtcNow;
-        }
+        user?.LastLoginAt = DateTime.UtcNow;
 
         // Log the activity (same shard)
         _context.UserActivities.Add(new UserActivity
@@ -132,7 +130,7 @@ public class SessionsController : ControllerBase
         var session = await _context.UserSessions
             .FirstOrDefaultAsync(s => s.SessionToken == sessionToken);
 
-        if (session == null)
+        if (session is null)
         {
             return Ok(new SessionValidationResult
             {
@@ -141,7 +139,7 @@ public class SessionsController : ControllerBase
             });
         }
 
-        if (session.RevokedAt != null)
+        if (session.RevokedAt is not null)
         {
             return Ok(new SessionValidationResult
             {
@@ -179,7 +177,7 @@ public class SessionsController : ControllerBase
         var session = await _context.UserSessions
             .FirstOrDefaultAsync(s => s.SessionToken == sessionToken);
 
-        if (session == null)
+        if (session is null)
             return NotFound();
 
         session.RevokedAt = DateTime.UtcNow;

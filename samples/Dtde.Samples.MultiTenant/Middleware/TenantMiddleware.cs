@@ -1,7 +1,7 @@
-namespace Dtde.Samples.MultiTenant.Middleware;
 
 using Dtde.Samples.MultiTenant.Services;
 
+namespace Dtde.Samples.MultiTenant.Middleware;
 /// <summary>
 /// Middleware that extracts tenant ID from request headers.
 /// </summary>

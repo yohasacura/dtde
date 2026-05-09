@@ -1,6 +1,7 @@
 using Dtde.EntityFramework;
 using Dtde.EntityFramework.Extensions;
 using Dtde.Samples.RegionSharding.Entities;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Dtde.Samples.RegionSharding.Data;

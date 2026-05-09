@@ -2,6 +2,7 @@ using Dtde.Abstractions.Metadata;
 using Dtde.EntityFramework;
 using Dtde.EntityFramework.Extensions;
 using Dtde.Samples.Combined.Entities;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Dtde.Samples.Combined.Data;

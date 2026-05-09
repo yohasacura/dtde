@@ -1,5 +1,6 @@
 using Dtde.Samples.RegionSharding.Data;
 using Dtde.Samples.RegionSharding.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 

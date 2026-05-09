@@ -1,5 +1,6 @@
 using Dtde.Sample.WebApi.Data;
 using Dtde.Sample.WebApi.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 

@@ -21,5 +21,5 @@ public class UserSession
     public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
     public DateTime? RevokedAt { get; set; }
-    public bool IsActive => RevokedAt == null && ExpiresAt > DateTime.UtcNow;
+    public bool IsActive => RevokedAt is null && ExpiresAt > DateTime.UtcNow;
 }

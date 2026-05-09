@@ -5,8 +5,8 @@ namespace Dtde.Samples.MultiTenant.Services;
 /// </summary>
 public interface ITenantContextAccessor
 {
-    string? TenantId { get; }
-    void SetTenant(string tenantId);
+    public string? TenantId { get; }
+    public void SetTenant(string tenantId);
 }
 
 /// <summary>

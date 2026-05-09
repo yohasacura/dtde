@@ -1,6 +1,7 @@
 using Dtde.Samples.MultiTenant.Data;
 using Dtde.Samples.MultiTenant.Entities;
 using Dtde.Samples.MultiTenant.Services;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -64,7 +65,7 @@ public class TenantsController : ControllerBase
             })
             .FirstOrDefaultAsync();
 
-        if (tenant == null)
+        if (tenant is null)
             return NotFound();
 
         return Ok(tenant);
@@ -113,7 +114,7 @@ public class TenantsController : ControllerBase
     public async Task<ActionResult> UpdateTenantPlan(string tenantId, UpdatePlanRequest request)
     {
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantId == tenantId);
-        if (tenant == null)
+        if (tenant is null)
             return NotFound();
 
         var oldPlan = tenant.Plan;
@@ -133,7 +134,7 @@ public class TenantsController : ControllerBase
     public async Task<ActionResult> DeactivateTenant(string tenantId)
     {
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantId == tenantId);
-        if (tenant == null)
+        if (tenant is null)
             return NotFound();
 
         tenant.IsActive = false;

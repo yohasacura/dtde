@@ -1,5 +1,6 @@
 using Dtde.Samples.DateSharding.Data;
 using Dtde.Samples.DateSharding.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -174,7 +175,7 @@ public class MetricsController : ControllerBase
     [HttpPost("batch")]
     public async Task<ActionResult<BatchIngestResult>> BatchIngestMetrics(BatchIngestRequest request)
     {
-        if (request.DataPoints == null || request.DataPoints.Count == 0)
+        if (request.DataPoints is null || request.DataPoints.Count == 0)
         {
             return BadRequest("No data points provided");
         }

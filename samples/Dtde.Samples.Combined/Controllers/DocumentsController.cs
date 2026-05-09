@@ -1,5 +1,6 @@
 using Dtde.Samples.Combined.Data;
 using Dtde.Samples.Combined.Entities;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -90,7 +91,7 @@ public class DocumentsController : ControllerBase
             .Where(d => d.DocumentId == documentId)
             .FirstOrDefaultAsync();
 
-        if (document == null)
+        if (document is null)
             return NotFound();
 
         return Ok(new DocumentDetailDto
@@ -182,7 +183,7 @@ public class DocumentsController : ControllerBase
         var document = await _context.RegulatoryDocuments
             .FirstOrDefaultAsync(d => d.DocumentId == documentId);
 
-        if (document == null)
+        if (document is null)
             return NotFound();
 
         var oldStatus = document.Status;
