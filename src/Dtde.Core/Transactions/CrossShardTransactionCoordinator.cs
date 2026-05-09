@@ -107,7 +107,22 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
     public ITransactionLog? TransactionLog => _transactionLog;
 
     /// <inheritdoc />
-    public ICrossShardTransaction? CurrentTransaction => _currentTransaction.Value;
+    public ICrossShardTransaction? CurrentTransaction
+    {
+        get
+        {
+            // Mutations to AsyncLocal made inside an async method's
+            // post-await body don't propagate back to the caller. So when a
+            // transaction is disposed via `await using`, we can't reliably
+            // null out the AsyncLocal slot from inside DisposeAsync. Instead
+            // we check whether the slot's current value has already been
+            // disposed and treat that as "no ambient transaction" — which is
+            // correct, because a disposed transaction is no longer usable.
+            return _currentTransaction.Value is CrossShardTransaction { IsDisposed: true }
+                ? null
+                : _currentTransaction.Value;
+        }
+    }
 
     /// <inheritdoc />
     public Task<ICrossShardTransaction> BeginTransactionAsync(
@@ -123,7 +138,10 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (_currentTransaction.Value is not null)
+        // Use CurrentTransaction (the property) so a disposed ambient
+        // transaction stuck in this AsyncLocal slot — left over from a
+        // previous `await using` scope — doesn't trip nested-tx detection.
+        if (CurrentTransaction is not null)
         {
             throw new InvalidOperationException(
                 "A cross-shard transaction is already active in the current context. " +
@@ -134,12 +152,24 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
 
         TransactionLogMessages.BeginningTransactionWithOptions(_logger, transactionId, options.IsolationLevel);
 
+        // The dispose callback clears _currentTransaction.Value when the
+        // transaction is disposed (via `await using`), so the next
+        // BeginTransactionAsync in this scope sees no ambient transaction.
+        Action onDisposed = () =>
+        {
+            if (_currentTransaction.Value is { } current && current.TransactionId == transactionId)
+            {
+                _currentTransaction.Value = null;
+            }
+        };
+
         var transaction = new CrossShardTransaction(
             transactionId,
             options,
             _shardRegistry,
             _participantFactory,
             _transactionLog,
+            onDisposed,
             _transactionLogger);
 
         // Set the ambient transaction in the caller's synchronous frame —
