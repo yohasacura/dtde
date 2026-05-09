@@ -2,6 +2,8 @@ using System.Linq.Expressions;
 
 using Dtde.Abstractions.Metadata;
 using Dtde.Abstractions.Temporal;
+using Dtde.Abstractions.Transactions;
+using Dtde.Core.Transactions;
 using Dtde.EntityFramework.Diagnostics;
 
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +34,7 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
     private readonly IMetadataRegistry _metadataRegistry;
     private readonly ITemporalContext _temporalContext;
     private readonly IShardContextFactory _shardContextFactory;
+    private readonly ICrossShardTransactionCoordinator? _transactionCoordinator;
     private readonly ILogger<ShardedQueryExecutor> _logger;
 
     /// <summary>
@@ -50,12 +53,38 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
         ITemporalContext temporalContext,
         IShardContextFactory shardContextFactory,
         ILogger<ShardedQueryExecutor> logger)
+        : this(shardRegistry, shardGroupRegistry, metadataRegistry, temporalContext, shardContextFactory, transactionCoordinator: null, logger)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance with a cross-shard transaction coordinator.
+    /// When an ambient transaction is active, queries reuse each shard's
+    /// open participant context — making writes within the transaction
+    /// visible to subsequent reads on the same shard (read-after-write).
+    /// </summary>
+    /// <param name="shardRegistry">The flat shard registry.</param>
+    /// <param name="shardGroupRegistry">The shard-group registry.</param>
+    /// <param name="metadataRegistry">The metadata registry.</param>
+    /// <param name="temporalContext">The temporal context.</param>
+    /// <param name="shardContextFactory">The shard context factory.</param>
+    /// <param name="transactionCoordinator">The cross-shard transaction coordinator (optional).</param>
+    /// <param name="logger">The logger.</param>
+    public ShardedQueryExecutor(
+        IShardRegistry shardRegistry,
+        IShardGroupRegistry shardGroupRegistry,
+        IMetadataRegistry metadataRegistry,
+        ITemporalContext temporalContext,
+        IShardContextFactory shardContextFactory,
+        ICrossShardTransactionCoordinator? transactionCoordinator,
+        ILogger<ShardedQueryExecutor> logger)
     {
         _shardRegistry = shardRegistry ?? throw new ArgumentNullException(nameof(shardRegistry));
         _shardGroupRegistry = shardGroupRegistry ?? throw new ArgumentNullException(nameof(shardGroupRegistry));
         _metadataRegistry = metadataRegistry ?? throw new ArgumentNullException(nameof(metadataRegistry));
         _temporalContext = temporalContext ?? throw new ArgumentNullException(nameof(temporalContext));
         _shardContextFactory = shardContextFactory ?? throw new ArgumentNullException(nameof(shardContextFactory));
+        _transactionCoordinator = transactionCoordinator;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -103,9 +132,19 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
 
         var tasks = shardsList.Select(async shard =>
         {
-            await using var context = await _shardContextFactory.CreateContextAsync(shard, cancellationToken).ConfigureAwait(false);
-            var shardQuery = BuildShardQuery<TEntity>(context, shard);
-            return await ExecuteScalarOnShardAsync<TEntity, TResult>(shardQuery, query.Expression, cancellationToken).ConfigureAwait(false);
+            var lease = await GetContextForShardAsync(shard, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var shardQuery = BuildShardQuery<TEntity>(lease.Context, shard);
+                return await ExecuteScalarOnShardAsync<TEntity, TResult>(shardQuery, query.Expression, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (lease.OwnsContext)
+                {
+                    await lease.Context.DisposeAsync().ConfigureAwait(false);
+                }
+            }
         });
 
         var results = await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -200,16 +239,21 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
 
     /// <summary>
     /// Executes query on a specific shard, handling both database-level and table-level sharding.
+    /// Reuses the ambient cross-shard transaction's per-shard context when one is active, so
+    /// queries see writes made earlier in the same transaction (read-after-write).
     /// </summary>
     private async Task<IReadOnlyList<TEntity>> ExecuteOnShardAsync<TEntity>(
         IQueryable<TEntity> originalQuery,
         IShardMetadata shard,
         CancellationToken cancellationToken) where TEntity : class
     {
+        DbContext? freshContext = null;
         try
         {
-            await using var context = await _shardContextFactory.CreateContextAsync(shard, cancellationToken).ConfigureAwait(false);
-            var shardQuery = BuildShardQuery<TEntity>(context, shard);
+            var context = await GetContextForShardAsync(shard, cancellationToken).ConfigureAwait(false);
+            freshContext = context.OwnsContext ? context.Context : null;
+
+            var shardQuery = BuildShardQuery<TEntity>(context.Context, shard);
 
             // Apply the original expression tree to the shard's query source
             var finalQuery = ApplyExpressionToSource(originalQuery.Expression, shardQuery);
@@ -235,6 +279,39 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
 
             throw;
         }
+        finally
+        {
+            if (freshContext is not null)
+            {
+                await freshContext.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private readonly record struct ShardContextLease(DbContext Context, bool OwnsContext);
+
+    /// <summary>
+    /// Returns a per-shard <see cref="DbContext"/> for executing a query.
+    /// When an ambient cross-shard transaction is active and has a participant
+    /// for this shard, the participant's open context is reused (so queries see
+    /// uncommitted writes made earlier in the transaction). Otherwise — or when
+    /// the transaction has no participant for this shard yet — the shard is
+    /// auto-enlisted, so subsequent operations stay transactional. Without an
+    /// ambient transaction, a fresh context is materialised and disposed by the
+    /// caller.
+    /// </summary>
+    private async Task<ShardContextLease> GetContextForShardAsync(
+        IShardMetadata shard,
+        CancellationToken cancellationToken)
+    {
+        if (_transactionCoordinator?.CurrentTransaction is CrossShardTransaction tx)
+        {
+            var participant = await tx.GetOrCreateParticipantAsync(shard, cancellationToken).ConfigureAwait(false);
+            return new ShardContextLease(participant.Context, OwnsContext: false);
+        }
+
+        var fresh = await _shardContextFactory.CreateContextAsync(shard, cancellationToken).ConfigureAwait(false);
+        return new ShardContextLease(fresh, OwnsContext: true);
     }
 
     /// <summary>

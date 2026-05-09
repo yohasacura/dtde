@@ -140,7 +140,17 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITemporalContext>(options.TemporalContext);
 
         services.AddScoped<IExpressionRewriter, DtdeExpressionRewriter>();
-        services.AddScoped<IShardedQueryExecutor, ShardedQueryExecutor>();
+        services.AddScoped<IShardedQueryExecutor>(sp => new ShardedQueryExecutor(
+            sp.GetRequiredService<IShardRegistry>(),
+            sp.GetRequiredService<IShardGroupRegistry>(),
+            sp.GetRequiredService<IMetadataRegistry>(),
+            sp.GetRequiredService<ITemporalContext>(),
+            sp.GetRequiredService<IShardContextFactory>(),
+            // Optional: coordinator is only registered when transparent
+            // sharding is enabled. When present, the executor reuses
+            // participant contexts for read-after-write within transactions.
+            sp.GetService<ICrossShardTransactionCoordinator>(),
+            sp.GetRequiredService<ILogger<ShardedQueryExecutor>>()));
 
         services.AddScoped<IDtdeUpdateProcessor, DtdeUpdateProcessor>();
         services.AddScoped<VersionManager>();
@@ -153,10 +163,17 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Default to in-memory transaction log. Application code can register
+        // a different implementation (FileBasedTransactionLog, or a custom
+        // durable backend) before calling AddDtdeDbContext to get crash
+        // recovery.
+        services.TryAddSingleton<ITransactionLog, InMemoryTransactionLog>();
+
         services.AddScoped<ICrossShardTransactionCoordinator>(sp =>
         {
             var shardRegistry = sp.GetRequiredService<IShardRegistry>();
             var contextFactory = sp.GetRequiredService<IShardContextFactory>();
+            var transactionLog = sp.GetService<ITransactionLog>();
             var logger = sp.GetRequiredService<ILogger<CrossShardTransactionCoordinator>>();
             var transactionLogger = sp.GetRequiredService<ILogger<CrossShardTransaction>>();
 
@@ -188,6 +205,7 @@ public static class ServiceCollectionExtensions
             return new CrossShardTransactionCoordinator(
                 shardRegistry,
                 participantFactory,
+                transactionLog,
                 logger,
                 transactionLogger);
         });

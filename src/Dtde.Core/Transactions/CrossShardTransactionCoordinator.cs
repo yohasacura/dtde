@@ -56,6 +56,7 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
 {
     private readonly IShardRegistry _shardRegistry;
     private readonly ShardParticipantFactory _participantFactory;
+    private readonly ITransactionLog? _transactionLog;
     private readonly ILogger<CrossShardTransactionCoordinator> _logger;
     private readonly ILogger<CrossShardTransaction> _transactionLogger;
     private readonly AsyncLocal<ICrossShardTransaction?> _currentTransaction = new();
@@ -72,12 +73,38 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
         ShardParticipantFactory participantFactory,
         ILogger<CrossShardTransactionCoordinator> logger,
         ILogger<CrossShardTransaction> transactionLogger)
+        : this(shardRegistry, participantFactory, transactionLog: null, logger, transactionLogger)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance with an <see cref="ITransactionLog"/>.
+    /// Lifecycle events are persisted so <see cref="RecoverAsync"/> can drive
+    /// in-doubt transactions to a terminal state after a coordinator crash.
+    /// </summary>
+    /// <param name="shardRegistry">The shard registry.</param>
+    /// <param name="participantFactory">Factory that materialises a per-shard context and starts its local transaction with the requested isolation level.</param>
+    /// <param name="transactionLog">Optional durable log for crash recovery.</param>
+    /// <param name="logger">The logger for the coordinator.</param>
+    /// <param name="transactionLogger">The logger for transactions.</param>
+    public CrossShardTransactionCoordinator(
+        IShardRegistry shardRegistry,
+        ShardParticipantFactory participantFactory,
+        ITransactionLog? transactionLog,
+        ILogger<CrossShardTransactionCoordinator> logger,
+        ILogger<CrossShardTransaction> transactionLogger)
     {
         _shardRegistry = shardRegistry ?? throw new ArgumentNullException(nameof(shardRegistry));
         _participantFactory = participantFactory ?? throw new ArgumentNullException(nameof(participantFactory));
+        _transactionLog = transactionLog;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _transactionLogger = transactionLogger ?? throw new ArgumentNullException(nameof(transactionLogger));
     }
+
+    /// <summary>
+    /// Gets the transaction log this coordinator is using, if any.
+    /// </summary>
+    public ITransactionLog? TransactionLog => _transactionLog;
 
     /// <inheritdoc />
     public ICrossShardTransaction? CurrentTransaction => _currentTransaction.Value;
@@ -112,11 +139,42 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
             options,
             _shardRegistry,
             _participantFactory,
+            _transactionLog,
             _transactionLogger);
 
+        // Set the ambient transaction in the caller's synchronous frame —
+        // AsyncLocal mutations made *after* an await don't flow back to the
+        // caller, so the assignment must happen before any async work below.
         _currentTransaction.Value = transaction;
 
-        return Task.FromResult<ICrossShardTransaction>(transaction);
+        // Without a log, we're done synchronously.
+        return _transactionLog is null
+            ? Task.FromResult<ICrossShardTransaction>(transaction)
+            : RecordStartAndReturnAsync(transaction, transactionId, options, cancellationToken);
+    }
+
+    private async Task<ICrossShardTransaction> RecordStartAndReturnAsync(
+        CrossShardTransaction transaction,
+        string transactionId,
+        CrossShardTransactionOptions options,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _transactionLog!
+                .RecordTransactionStartedAsync(transactionId, options, cancellationToken)
+                .ConfigureAwait(false);
+            return transaction;
+        }
+        catch
+        {
+            // Log write failed; tear the transaction down so the caller's
+            // happy path doesn't proceed with an unrecoverable transaction.
+            // The caller observes the original exception; the transaction
+            // we created and registered is disposed here.
+            await transaction.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -242,12 +300,70 @@ public sealed class CrossShardTransactionCoordinator : ICrossShardTransactionCoo
     }
 
     /// <inheritdoc />
-    public Task<int> RecoverAsync(CancellationToken cancellationToken = default)
+    public async Task<int> RecoverAsync(CancellationToken cancellationToken = default)
     {
-        // Transaction recovery requires persistent transaction logs
-        // This is a placeholder for future implementation
-        TransactionLogMessages.NoInDoubtTransactions(_logger);
-        return Task.FromResult(0);
+        // Without a durable log there's nothing to recover from.
+        if (_transactionLog is null)
+        {
+            TransactionLogMessages.NoInDoubtTransactions(_logger);
+            return 0;
+        }
+
+        var inDoubt = await _transactionLog
+            .GetInDoubtTransactionsAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (inDoubt.Count == 0)
+        {
+            TransactionLogMessages.NoInDoubtTransactions(_logger);
+            return 0;
+        }
+
+        TransactionLogMessages.RecoveringInDoubtTransactions(_logger, inDoubt.Count);
+
+        var resolved = 0;
+        foreach (var entry in inDoubt)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // The classic 2PC recovery rule: if every enlisted participant
+            // was logged as prepared, the global decision was "commit" — even
+            // if the coordinator died before the commit phase finished. The
+            // resolution is recorded so the log no longer flags this
+            // transaction as in-doubt.
+            //
+            // Otherwise (some participants never prepared), the transaction
+            // must be rolled back. The participants' local transactions are
+            // already gone with the crashed process, so this is just the
+            // logical decision; the actual cleanup happens at the storage
+            // layer (most relational providers automatically abort orphaned
+            // transactions when the connection drops).
+            if (entry.AllParticipantsPrepared)
+            {
+                await _transactionLog
+                    .RecordTransactionCommittedAsync(entry.TransactionId, cancellationToken)
+                    .ConfigureAwait(false);
+                TransactionLogMessages.RecoveredCommittedTransaction(
+                    _logger,
+                    entry.TransactionId,
+                    entry.EnlistedParticipants.Count);
+            }
+            else
+            {
+                await _transactionLog
+                    .RecordTransactionRolledBackAsync(entry.TransactionId, cancellationToken)
+                    .ConfigureAwait(false);
+                TransactionLogMessages.RecoveredRolledBackTransaction(
+                    _logger,
+                    entry.TransactionId,
+                    entry.EnlistedParticipants.Count,
+                    entry.PreparedParticipants.Count);
+            }
+
+            resolved++;
+        }
+
+        return resolved;
     }
 
     private async Task ExecuteWithRetryAsync(

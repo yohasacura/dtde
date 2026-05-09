@@ -116,18 +116,18 @@ public sealed class ShardTransactionParticipant : ITransactionParticipant, IAsyn
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (_vote != ParticipantVote.Prepared)
+        if (_vote != ParticipantVote.Prepared && _vote != ParticipantVote.ReadOnly)
         {
-            if (_vote == ParticipantVote.ReadOnly)
-            {
-                // Nothing to commit for read-only participants
-                return;
-            }
-
             throw new InvalidOperationException(
-                $"Cannot commit participant '{ShardId}' in state '{_vote}'. Must be in Prepared state.");
+                $"Cannot commit participant '{ShardId}' in state '{_vote}'. " +
+                "Must be in Prepared or ReadOnly state.");
         }
 
+        // Always commit the underlying transaction, even for "read-only"
+        // participants (no fresh change-tracker changes). The transaction
+        // may still contain work committed via earlier SaveChangesAsync
+        // calls or after a RollbackToSavepoint, and we must commit to
+        // persist that work and release locks.
         if (_transaction is not null)
         {
             await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -156,6 +156,63 @@ public sealed class ShardTransactionParticipant : ITransactionParticipant, IAsyn
             // Best effort rollback - log but don't throw
         }
     }
+
+    /// <inheritdoc />
+    public async Task CreateSavepointAsync(string savepointName, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(savepointName);
+
+        if (_transaction is null || !_transaction.SupportsSavepoints)
+        {
+            // Non-relational / in-memory provider: savepoints aren't a thing
+            // there. Treat as a no-op so the write path works uniformly across
+            // providers. Caller can detect support via SupportsSavepoints.
+            return;
+        }
+
+        await _transaction.CreateSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task RollbackToSavepointAsync(string savepointName, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(savepointName);
+
+        if (_transaction is null || !_transaction.SupportsSavepoints)
+        {
+            return;
+        }
+
+        await _transaction.RollbackToSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
+
+        // Rolling back to a savepoint may leave EF's change tracker out of
+        // sync with the database (entries that were saved between the
+        // savepoint and now are still tracked). Conservatively detach all
+        // tracked entries so the next read pulls fresh state from the DB.
+        _context.ChangeTracker.Clear();
+    }
+
+    /// <inheritdoc />
+    public async Task ReleaseSavepointAsync(string savepointName, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(savepointName);
+
+        if (_transaction is null || !_transaction.SupportsSavepoints)
+        {
+            return;
+        }
+
+        await _transaction.ReleaseSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether this participant's local transaction supports savepoints.
+    /// False for in-memory providers and any other non-relational store.
+    /// </summary>
+    public bool SupportsSavepoints => _transaction?.SupportsSavepoints ?? false;
 
     /// <summary>
     /// Disposes of the participant and its resources.
