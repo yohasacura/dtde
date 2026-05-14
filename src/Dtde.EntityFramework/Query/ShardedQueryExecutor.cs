@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -584,19 +585,75 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
 
         private void ExtractEqualityPredicate(BinaryExpression binary)
         {
-            // Extract property = value patterns
-            var (propertyName, value) = (binary.Left, binary.Right) switch
+            // Find the side that is a member access rooted at the lambda
+            // parameter (the entity), then evaluate the other side. Closures
+            // (`var r = "EU"; Where(a => a.Region == r)`) compile to
+            // MemberExpressions rooted at a hoisted-locals ConstantExpression,
+            // not the lambda parameter — without evaluation we'd miss them
+            // and fan out to every shard. Mirrors EF Core's own
+            // ParameterExtractingExpressionVisitor behaviour, scoped down to
+            // the narrow shapes the shard pruner cares about.
+            if (TryGetEntityMemberName(binary.Left, out var leftName) &&
+                TryEvaluate(binary.Right, out var rightValue))
             {
-                (MemberExpression member, ConstantExpression constant) =>
-                    (member.Member.Name, constant.Value),
-                (ConstantExpression constant, MemberExpression member) =>
-                    (member.Member.Name, constant.Value),
-                _ => (null, null)
-            };
+                _predicates[leftName] = rightValue;
+                return;
+            }
 
-            if (propertyName is not null)
+            if (TryGetEntityMemberName(binary.Right, out var rightName) &&
+                TryEvaluate(binary.Left, out var leftValue))
             {
-                _predicates[propertyName] = value;
+                _predicates[rightName] = leftValue;
+            }
+        }
+
+        private static bool TryGetEntityMemberName(
+            Expression expression,
+            [NotNullWhen(true)] out string? name)
+        {
+            if (expression is MemberExpression member && RootsAtParameter(member))
+            {
+                name = member.Member.Name;
+                return true;
+            }
+
+            name = null;
+            return false;
+        }
+
+        private static bool RootsAtParameter(MemberExpression member)
+        {
+            // Walk the access chain to its base. `a.X` roots at a
+            // ParameterExpression; `closure.r` or `closure.req.X` roots at a
+            // ConstantExpression (the hoisted-locals object).
+            Expression? current = member.Expression;
+            while (current is MemberExpression inner)
+            {
+                current = inner.Expression;
+            }
+
+            return current is ParameterExpression;
+        }
+
+        private static bool TryEvaluate(Expression expression, out object? value)
+        {
+            if (expression is ConstantExpression constant)
+            {
+                value = constant.Value;
+                return true;
+            }
+
+            try
+            {
+                value = Expression.Lambda(expression).Compile().DynamicInvoke();
+                return true;
+            }
+#pragma warning disable CA1031 // Best-effort closure extraction — falling back to fan-out preserves correctness.
+            catch
+#pragma warning restore CA1031
+            {
+                value = null;
+                return false;
             }
         }
     }
