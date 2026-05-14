@@ -1,4 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -584,19 +586,140 @@ public sealed class ShardedQueryExecutor : IShardedQueryExecutor
 
         private void ExtractEqualityPredicate(BinaryExpression binary)
         {
-            // Extract property = value patterns
-            var (propertyName, value) = (binary.Left, binary.Right) switch
+            // Find the side that is a member access rooted at the lambda
+            // parameter (the entity), then evaluate the other side. Closures
+            // (`var r = "EU"; Where(a => a.Region == r)`) compile to
+            // MemberExpressions rooted at a hoisted-locals ConstantExpression,
+            // not the lambda parameter — without evaluation we'd miss them
+            // and fan out to every shard. Mirrors EF Core's own
+            // ParameterExtractingExpressionVisitor behaviour, scoped down to
+            // the narrow shapes the shard pruner cares about.
+            if (TryGetEntityMemberName(binary.Left, out var leftName) &&
+                TryEvaluate(binary.Right, out var rightValue))
             {
-                (MemberExpression member, ConstantExpression constant) =>
-                    (member.Member.Name, constant.Value),
-                (ConstantExpression constant, MemberExpression member) =>
-                    (member.Member.Name, constant.Value),
-                _ => (null, null)
-            };
+                _predicates[leftName] = rightValue;
+                return;
+            }
 
-            if (propertyName is not null)
+            if (TryGetEntityMemberName(binary.Right, out var rightName) &&
+                TryEvaluate(binary.Left, out var leftValue))
             {
-                _predicates[propertyName] = value;
+                _predicates[rightName] = leftValue;
+            }
+        }
+
+        private static bool TryGetEntityMemberName(
+            Expression expression,
+            [NotNullWhen(true)] out string? name)
+        {
+            if (expression is MemberExpression member && RootsAtParameter(member))
+            {
+                name = member.Member.Name;
+                return true;
+            }
+
+            name = null;
+            return false;
+        }
+
+        private static bool RootsAtParameter(MemberExpression member)
+        {
+            // Walk the access chain to its base. `a.X` roots at a
+            // ParameterExpression; `closure.r` or `closure.req.X` roots at a
+            // ConstantExpression (the hoisted-locals object).
+            Expression? current = member.Expression;
+            while (current is MemberExpression inner)
+            {
+                current = inner.Expression;
+            }
+
+            return current is ParameterExpression;
+        }
+
+        // Only evaluate shapes that are guaranteed stable and side-effect free:
+        // constants, and member-access chains rooted at a closure constant.
+        // We deliberately do *not* compile-and-invoke arbitrary expressions —
+        // a predicate like `Where(a => a.Region == NextRegion())` would let the
+        // pruner observe a different value than EF Core does at query time,
+        // routing to the wrong shard. Method calls, conditionals, and other
+        // computed expressions fall back to fan-out (correctness preserved).
+        private static bool TryEvaluate(Expression expression, out object? value)
+        {
+            expression = UnwrapConversion(expression);
+
+            if (expression is ConstantExpression constant)
+            {
+                value = constant.Value;
+                return true;
+            }
+
+            if (expression is MemberExpression member)
+            {
+                return TryEvaluateClosureMemberAccess(member, out value);
+            }
+
+            value = null;
+            return false;
+        }
+
+        // Strips Convert / ConvertChecked / TypeAs nodes the compiler inserts
+        // around captured values when the closure field type doesn't exactly
+        // match the comparand type (boxing, nullable lifting, etc.).
+        private static Expression UnwrapConversion(Expression expression)
+        {
+            while (expression is UnaryExpression
+                {
+                    NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked or ExpressionType.TypeAs,
+                    Operand: var operand,
+                })
+            {
+                expression = operand;
+            }
+
+            return expression;
+        }
+
+        // Walks an instance member-access chain by reflection, anchored at a
+        // closure constant. Static members (member.Expression is null) and
+        // indexed properties are out of scope.
+        private static bool TryEvaluateClosureMemberAccess(MemberExpression member, out object? value)
+        {
+            if (member.Expression is null)
+            {
+                value = null;
+                return false;
+            }
+
+            if (!TryEvaluate(member.Expression, out var instance))
+            {
+                value = null;
+                return false;
+            }
+
+            try
+            {
+                switch (member.Member)
+                {
+                    case FieldInfo field:
+                        value = field.GetValue(instance);
+                        return true;
+
+                    case PropertyInfo property when property.GetMethod is not null
+                                                  && property.GetMethod.GetParameters().Length == 0:
+                        value = property.GetValue(instance);
+                        return true;
+
+                    default:
+                        value = null;
+                        return false;
+                }
+            }
+#pragma warning disable CA1031 // Best-effort: a malformed closure or unsupported member shape falls back to fan-out.
+            catch
+#pragma warning restore CA1031
+            {
+                value = null;
+                return false;
             }
         }
     }
