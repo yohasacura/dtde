@@ -17,6 +17,7 @@
     <!--
       Suppressed analyzer rules (alphabetical):
         CA1002 - Do not expose generic lists (DTOs use List<T> for simplicity)
+        CA1050 - Declare types in namespaces (Program.cs top-level records / file-scoped types are fine in samples)
         CA1062 - Validate arguments of public methods (sample controllers don't need this)
         CA1304 - Specify CultureInfo
         CA1311 - Specify a culture for string conversion
@@ -24,11 +25,13 @@
         CA1848 - Use LoggerMessage delegates (samples use plain ILogger for clarity)
         CA1851 - Possible multiple enumeration of IEnumerable
         CA1860 - Avoid using 'Enumerable.Any()' on collection
+        CA1861 - Prefer static readonly fields over constant array arguments (inline arrays document the endpoint shape)
         CA1862 - Use StringComparison overloads
         CA1873 - Avoid potentially expensive logging arguments (samples favor inline string interpolation)
         CA2007 - ConfigureAwait (not needed in application code)
         CA2227 - Collection properties should be read only (samples use simple DTOs)
+        CA5394 - Random is insecure (samples use System.Random for synthetic seed data, not for security)
     -->
-    <NoWarn>$(NoWarn);CA1002;CA1062;CA1304;CA1311;CA1845;CA1848;CA1851;CA1860;CA1862;CA1873;CA2007;CA2227</NoWarn>
+    <NoWarn>$(NoWarn);CA1002;CA1050;CA1062;CA1304;CA1311;CA1845;CA1848;CA1851;CA1860;CA1861;CA1862;CA1873;CA2007;CA2227;CA5394</NoWarn>
   </PropertyGroup>
 </Project>

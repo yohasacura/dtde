@@ -15,11 +15,11 @@ builder.Services.AddOpenApi();
 // DTDE Bulk Operations Sample
 // ============================================================================
 // Demonstrates:
-//   • BulkInsertAsync          — routes per shard, single round-trip per shard.
-//   • BulkUpdateAsync          — set-based UPDATE fan-out across the group.
-//   • BulkDeleteAsync          — set-based DELETE fan-out across the group.
-//   • ExecuteStreamingAsync    — IAsyncEnumerable<T> with bounded buffering.
-//   • Custom IBulkInsertProvider — plug in your own bulk path (SqlBulkCopy etc).
+//   * BulkInsertAsync          — routes per shard, single round-trip per shard.
+//   * BulkUpdateAsync          — set-based UPDATE fan-out across the group.
+//   * BulkDeleteAsync          — set-based DELETE fan-out across the group.
+//   * ExecuteStreamingAsync    — IAsyncEnumerable<T> with bounded buffering.
+//   * Custom IBulkInsertProvider — plug in your own bulk path (SqlBulkCopy etc).
 // ----------------------------------------------------------------------------
 // The custom provider is registered BEFORE AddDtdeDbContext so it sits in
 // front of the default; it logs each bulk-insert call so you can watch it
@@ -28,9 +28,17 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<IBulkInsertProvider, LoggingBulkInsertProvider>();
 
+// One SQLite file per shard (database-mode). Cross-shard bulk operations
+// hold a write transaction on each shard at once — single-file SQLite
+// would serialise writers and deadlock the demo. Real-world deployments
+// hit similar concurrency limits when 2PC piles up against any single
+// store, so database-mode is the production-shaped choice anyway.
 builder.Services.AddDtdeDbContext<BulkOpsDbContext>(
-    (db, conn) => db.UseSqlite(conn ?? "Data Source=bulk_ops.db"),
-    dtde => dtde.AddShards("EU", "US", "APAC"));
+    (db, conn) => db.UseSqlite(conn ?? "Data Source=bulk_ops_parent.db"),
+    dtde => dtde
+        .AddShard("EU",   "Data Source=bulk_ops_eu.db")
+        .AddShard("US",   "Data Source=bulk_ops_us.db")
+        .AddShard("APAC", "Data Source=bulk_ops_apac.db"));
 
 var app = builder.Build();
 
@@ -58,12 +66,11 @@ app.MapPost("/seed", async (
         return Results.BadRequest("count must be positive.");
     }
 
-    var regions = new[] { "EU", "US", "APAC" };
     var rand = new Random(42);
-    var events = Enumerable.Range(1, count).Select(i => new Event
+    var events = Enumerable.Range(1, count).Select(i => new AppEvent
     {
         Id = i,
-        Region = regions[rand.Next(regions.Length)],
+        Region = SeedConstants.Regions[rand.Next(SeedConstants.Regions.Length)],
         Type = (rand.NextDouble() < 0.5) ? "click" : "view",
         Payload = $"event-{i}",
         CreatedAt = DateTime.UtcNow,
@@ -82,12 +89,12 @@ app.MapPost("/anonymise-clicks", async (
     CancellationToken ct) =>
 {
 #if NET10_0_OR_GREATER
-    var updated = await db.BulkUpdateAsync<Event>(
+    var updated = await db.BulkUpdateAsync<AppEvent>(
         e => e.Type == "click",
         setters => setters.SetProperty(e => e.Payload, "<redacted>"),
         ct);
 #else
-    var updated = await db.BulkUpdateAsync<Event>(
+    var updated = await db.BulkUpdateAsync<AppEvent>(
         e => e.Type == "click",
         p => p.SetProperty(e => e.Payload, "<redacted>"),
         ct);
@@ -105,7 +112,7 @@ app.MapPost("/purge-old", async (
     BulkOpsDbContext db,
     CancellationToken ct) =>
 {
-    var deleted = await db.BulkDeleteAsync<Event>(e => e.CreatedAt < before, ct);
+    var deleted = await db.BulkDeleteAsync<AppEvent>(e => e.CreatedAt < before, ct);
     return Results.Ok(new { Status = "purged", RowsDeleted = deleted });
 })
 .WithName("PurgeOld");
@@ -125,14 +132,14 @@ app.MapGet("/stream", (
 })
 .WithName("Stream");
 
-static async IAsyncEnumerable<Event> StreamEvents(
+static async IAsyncEnumerable<AppEvent> StreamEvents(
     BulkOpsDbContext db,
     Dtde.EntityFramework.Query.IShardedQueryExecutor executor,
     int? bufferSize,
     [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
 {
     await foreach (var ev in executor.ExecuteStreamingAsync(
-        db.Set<Event>().AsQueryable(),
+        db.Set<AppEvent>().AsQueryable(),
         bufferSize,
         ct))
     {
@@ -160,7 +167,7 @@ static async IAsyncEnumerable<EventSummary> StreamSummaries(
     [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
 {
     await foreach (var ev in executor.ExecuteStreamingAsync(
-        db.Set<Event>().AsQueryable(),
+        db.Set<AppEvent>().AsQueryable(),
         bufferSize: null,
         ct))
     {
@@ -183,4 +190,14 @@ app.MapGet("/", () => Results.Ok(new
 
 app.Run();
 
-public sealed record EventSummary(int Id, string Region, string Type);
+namespace Dtde.Samples.BulkOperations
+{
+    /// <summary>Seed regions kept as a static-readonly array to satisfy CA1861.</summary>
+    internal static class SeedConstants
+    {
+        public static readonly string[] Regions = ["EU", "US", "APAC"];
+    }
+
+    /// <summary>Lightweight DTO returned by the /stream-summary endpoint.</summary>
+    public sealed record EventSummary(int Id, string Region, string Type);
+}

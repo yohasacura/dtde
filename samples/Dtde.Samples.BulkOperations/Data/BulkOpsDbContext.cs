@@ -8,7 +8,7 @@ namespace Dtde.Samples.BulkOperations.Data;
 
 public class BulkOpsDbContext : DtdeDbContext
 {
-    public DbSet<Event> Events => Set<Event>();
+    public DbSet<AppEvent> AppEvents => Set<AppEvent>();
 
     public BulkOpsDbContext(DbContextOptions<BulkOpsDbContext> options)
         : base(options)
@@ -20,7 +20,7 @@ public class BulkOpsDbContext : DtdeDbContext
         ArgumentNullException.ThrowIfNull(modelBuilder);
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Event>(entity =>
+        modelBuilder.Entity<AppEvent>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Region).HasMaxLength(10).IsRequired();

@@ -5,12 +5,14 @@ The **smallest possible** DTDE sample. A minimal Web API with two entities:
 - `Customer` — sharded by `Region` (property-based).
 - `Contract` — temporal (bi-temporal validity via `ValidFrom`/`ValidTo`).
 
-Use this sample to learn the basic shape of a DTDE-enabled application: how to
-inherit `DtdeDbContext`, register `UseDtde`, and configure entities in
-`OnModelCreating`. For specialised strategies, see the strategy-specific
-samples (`Dtde.Samples.RegionSharding`, `Dtde.Samples.DateSharding`,
-`Dtde.Samples.HashSharding`, `Dtde.Samples.MultiTenant`,
-`Dtde.Samples.Combined`).
+Use this sample to learn the basic shape of a DTDE-enabled application:
+how to inherit `DtdeDbContext`, register `AddDtdeDbContext<TContext>` in
+DI, and configure entities in `OnModelCreating`. For specialised
+strategies, see the strategy-specific samples (`Dtde.Samples.RegionSharding`,
+`Dtde.Samples.DateSharding`, `Dtde.Samples.HashSharding`,
+`Dtde.Samples.MultiTenant`, `Dtde.Samples.Combined`). For
+cross-shard transactions and bulk operations, see
+`Dtde.Samples.Transactions` and `Dtde.Samples.BulkOperations`.
 
 ## Run
 

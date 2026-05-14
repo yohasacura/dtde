@@ -48,14 +48,23 @@ public sealed class ShardTransactionParticipant : ITransactionParticipant, IAsyn
     public int PendingOperationCount => _pendingOperations.Count + (_context.ChangeTracker.HasChanges() ? 1 : 0);
 
     /// <summary>
-    /// Gets the DbContext for this participant.
+    /// Gets the per-shard <see cref="DbContext"/> bound to this
+    /// participant. Application code writes through this context inside a
+    /// cross-shard transaction (the documented usage pattern):
+    /// <code>
+    /// var participant = await tx.GetOrCreateParticipantAsync(shard);
+    /// participant.Context.Set&lt;Customer&gt;().Add(customer);
+    /// </code>
     /// </summary>
-    internal DbContext Context => _context;
+    public DbContext Context => _context;
 
     /// <summary>
-    /// Gets the underlying database transaction.
+    /// Gets the underlying EF Core local transaction. Exposed for advanced
+    /// scenarios — custom bulk loaders can call
+    /// <c>IDbContextTransaction.GetDbTransaction()</c> (from the relational
+    /// extensions) to enlist into <c>SqlBulkCopy</c>, PG <c>COPY</c>, etc.
     /// </summary>
-    internal IDbContextTransaction? Transaction => _transaction;
+    public IDbContextTransaction? Transaction => _transaction;
 
     /// <summary>
     /// Enqueues an operation to be executed on this shard.

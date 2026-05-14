@@ -1,11 +1,21 @@
 # DTDE Development Plan — Overview
 
-> **Design reference.** These documents capture DTDE's architecture, domain
-> model, and component boundaries as they exist in the shipped library. Use
-> them to understand *why* DTDE is structured the way it is. For end-user
-> documentation, prefer the [Wiki](../wiki/index.md) (API reference,
-> configuration) and the [Guides](../guides/index.md) (quickstarts and
-> task-oriented walkthroughs).
+> **Historical design reference.** These documents capture DTDE's original
+> architecture and component boundaries. They predate several feature waves
+> — per-entity shard groups, the durable transaction log + recovery,
+> pluggable bulk-insert providers, streaming fan-out, savepoints,
+> read-after-write inside transactions, multi-EF `BulkUpdate` — so some
+> code snippets and method names will not match the shipped public API
+> exactly.
+>
+> For accurate, current documentation use:
+>
+> - The [Guides](../guides/index.md) for task-oriented walkthroughs.
+> - The [API reference](../wiki/api-reference.md) for the canonical public type list.
+> - The [Architecture page](../wiki/architecture.md) for the current internal layering and request flows.
+>
+> The development-plan files remain useful as design rationale ("why was
+> this layered this way") rather than as how-to documentation.
 
 ## Document Navigation
 

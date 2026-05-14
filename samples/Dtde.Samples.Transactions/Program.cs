@@ -2,6 +2,7 @@ using Dtde.Abstractions.Transactions;
 using Dtde.Core.Transactions;
 using Dtde.EntityFramework;
 using Dtde.EntityFramework.Extensions;
+using Dtde.Samples.Transactions;
 using Dtde.Samples.Transactions.Data;
 using Dtde.Samples.Transactions.Entities;
 
@@ -27,9 +28,16 @@ builder.Services.AddOpenApi();
 builder.Services.AddSingleton<ITransactionLog>(_ =>
     new FileBasedTransactionLog(Path.Combine(AppContext.BaseDirectory, "tx-log.jsonl")));
 
+// One SQLite file per shard (database-mode). Cross-shard 2PC holds an
+// open write transaction on each enlisted shard simultaneously —
+// single-file SQLite would deadlock under concurrent writers, so the
+// demo uses one file per shard, mirroring the production-shaped choice.
 builder.Services.AddDtdeDbContext<TransactionsDbContext>(
-    (db, conn) => db.UseSqlite(conn ?? "Data Source=transactions.db"),
-    dtde => dtde.AddShards("EU", "US", "APAC"));
+    (db, conn) => db.UseSqlite(conn ?? "Data Source=transactions_parent.db"),
+    dtde => dtde
+        .AddShard("EU",   "Data Source=transactions_eu.db")
+        .AddShard("US",   "Data Source=transactions_us.db")
+        .AddShard("APAC", "Data Source=transactions_apac.db"));
 
 var app = builder.Build();
 
@@ -41,6 +49,21 @@ using (var scope = app.Services.CreateScope())
     // Replay any in-doubt transactions from a previous run.
     var coordinator = scope.ServiceProvider.GetRequiredService<ICrossShardTransactionCoordinator>();
     await coordinator.RecoverAsync();
+
+    // Seed three sample accounts (id 1 in EU, id 2 in US, id 3 in APAC)
+    // so the /transfer and /credit-with-bonus endpoints work out of the
+    // box. Idempotent: skip if the rows already exist from a prior run.
+    var existing = await ctx.Accounts.AsNoTracking()
+        .Select(a => a.Id).ToListAsync();
+    if (!existing.Contains(1) || !existing.Contains(2) || !existing.Contains(3))
+    {
+        await ctx.BulkInsertAsync(new[]
+        {
+            new Account { Id = 1, Region = "EU",   Balance = 1000m },
+            new Account { Id = 2, Region = "US",   Balance =  500m },
+            new Account { Id = 3, Region = "APAC", Balance =  250m },
+        });
+    }
 }
 
 if (app.Environment.IsDevelopment())
@@ -232,21 +255,24 @@ app.MapGet("/", () => Results.Ok(new
 
 app.Run();
 
-public sealed record TransferRequest(
-    string FromRegion,
-    int FromAccountId,
-    string ToRegion,
-    int ToAccountId,
-    decimal Amount);
+namespace Dtde.Samples.Transactions
+{
+    public sealed record TransferRequest(
+        string FromRegion,
+        int FromAccountId,
+        string ToRegion,
+        int ToAccountId,
+        decimal Amount);
 
-public sealed record CreditWithBonusRequest(
-    string Region,
-    int AccountId,
-    decimal BaseAmount,
-    decimal BonusAmount,
-    bool RejectBonus);
+    public sealed record CreditWithBonusRequest(
+        string Region,
+        int AccountId,
+        decimal BaseAmount,
+        decimal BonusAmount,
+        bool RejectBonus);
 
-public sealed record WithinTxRollupRequest(
-    string Region,
-    int NewAccountId,
-    decimal InitialBalance);
+    public sealed record WithinTxRollupRequest(
+        string Region,
+        int NewAccountId,
+        decimal InitialBalance);
+}
