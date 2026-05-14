@@ -85,6 +85,31 @@ public class PredicatePruningIntegrationTests : IAsyncLifetime
         }
     }
 
+    [Fact(DisplayName = "Method-call shard key: pruner does NOT invoke arbitrary code, falls back to fan-out")]
+    public async Task MethodCallShardKey_FallsBackToFanOut()
+    {
+        // The pruner must not compile-and-invoke method calls in predicates.
+        // If it did, a volatile / side-effecting method like NextRegion()
+        // could yield a different value here than EF Core's parameter
+        // extraction yields at query time — routing to the wrong shard and
+        // missing rows. Fan-out is the safe fallback.
+        var (sp, scope, ctx, _, _, _) = await BuildThreeShardContextAsync();
+        await using (sp)
+        await using (scope)
+        {
+            await using var tx = await ctx.BeginCrossShardTransactionAsync();
+            var crossShardTx = (CrossShardTransaction)tx;
+
+            var executor = scope.ServiceProvider.GetRequiredService<IShardedQueryExecutor>();
+            await executor.ExecuteAsync(
+                ctx.Set<PruneEntity>().Where(e => e.Region == StablePickRegion()).AsQueryable());
+
+            Assert.Equal(3, crossShardTx.EnlistedShards.Count);
+
+            await tx.RollbackAsync();
+        }
+    }
+
     [Fact(DisplayName = "Captured-property predicate (request.Region): query enlists only the matching shard")]
     public async Task CapturedPropertyShardKey_EnlistsOnlyMatchingShard()
     {
@@ -111,6 +136,10 @@ public class PredicatePruningIntegrationTests : IAsyncLifetime
             await tx.RollbackAsync();
         }
     }
+
+    // Used only by MethodCallShardKey_FallsBackToFanOut. Constant return —
+    // the test asserts pruner behaviour, not the value.
+    private static string StablePickRegion() => "EU";
 
     private async Task<(ServiceProvider sp, AsyncServiceScope scope, PruneDbContext ctx, SqliteConnection eu, SqliteConnection us, SqliteConnection apac)>
         BuildThreeShardContextAsync()
