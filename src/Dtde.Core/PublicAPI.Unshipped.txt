@@ -416,6 +416,7 @@ Dtde.Core.Transactions.CrossShardTransactionCoordinator.ExecuteInTransactionAsyn
 Dtde.Core.Transactions.CrossShardTransactionCoordinator.RecoverAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
 Dtde.Core.Transactions.ShardTransactionParticipant
 Dtde.Core.Transactions.ShardTransactionParticipant.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Dtde.Core.Transactions.ShardTransactionParticipant.Context.get -> Microsoft.EntityFrameworkCore.DbContext!
 Dtde.Core.Transactions.ShardTransactionParticipant.DisposeAsync() -> System.Threading.Tasks.ValueTask
 Dtde.Core.Transactions.ShardTransactionParticipant.EnqueueOperation(System.Func<Microsoft.EntityFrameworkCore.DbContext!, System.Threading.Tasks.Task!>! operation) -> void
 Dtde.Core.Transactions.ShardTransactionParticipant.ExecutePendingOperationsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
@@ -424,6 +425,7 @@ Dtde.Core.Transactions.ShardTransactionParticipant.PendingOperationCount.get -> 
 Dtde.Core.Transactions.ShardTransactionParticipant.PrepareAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Dtde.Abstractions.Transactions.ParticipantVote>!
 Dtde.Core.Transactions.ShardTransactionParticipant.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Dtde.Core.Transactions.ShardTransactionParticipant.ShardId.get -> string!
+Dtde.Core.Transactions.ShardTransactionParticipant.Transaction.get -> Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction?
 Dtde.Core.Transactions.ShardTransactionParticipant.Vote.get -> Dtde.Abstractions.Transactions.ParticipantVote
 override Dtde.Abstractions.Metadata.DateRange.GetHashCode() -> int
 override Dtde.Abstractions.Metadata.KeyRange.GetHashCode() -> int

@@ -13,6 +13,65 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 > The migration is straightforward (5-10 lines per project); see "Migrating
 > from 1.0.0" below. The next published version number is to be decided.
 
+### Audit fixes: public-API contract + samples + classes reference
+
+End-to-end audit of the documentation and samples against the shipped
+public surface. Three real issues found and fixed.
+
+**1. `ShardTransactionParticipant.Context` and `.Transaction` are now
+public.** They were `internal` — every documented code snippet
+(`fromP.Context.Set<Account>().Update(...)`) actually required
+`InternalsVisibleTo` and only worked from the test assemblies. External
+consumers couldn't drive writes through the participant the way every
+guide showed. Now both members are public, with full XML docs and
+matching `PublicAPI.Unshipped.txt` entries.
+
+**2. `EnsureAllShardsCreatedAsync` now triggers the metadata-registry
+backfill.** Without this, an application that called the lifecycle
+helper at startup but never touched `db.MetadataRegistry` (the typical
+ASP.NET DI pattern) would have a query executor that saw
+`ShardingConfiguration == null` for every entity, routed all queries to
+the default-group hot shard, and silently ignored the per-entity
+sharding declared in `OnModelCreating`. The backfill is now part of
+the standard startup path.
+
+**3. `Dtde.Samples.BulkOperations` and `Dtde.Samples.Transactions` are
+now in `Dtde.sln`.** They were physically present on disk but not
+registered in the solution, so solution-level CI builds skipped them
+entirely. Both also switched to **database-mode** (one SQLite file per
+shard) because single-file SQLite serialises write transactions and
+deadlocks any multi-shard 2PC demo — production-shaped configuration
+that mirrors how a real deployment would be wired.
+
+Both samples were verified end-to-end against a running web host:
+`/seed?count=50` correctly splits 11/22/17 entities across EU/US/APAC
+with one 2PC commit; `/transfer` and `/credit-with-bonus` move balances
+and roll back savepoint work as expected; `/within-tx-rollup` proves
+read-after-write inside a transaction (count=2, balance=1027 — the seed
+APAC row + the new in-transaction insert).
+
+**Documentation:**
+
+- `docs/wiki/classes-reference.md` — removed the bogus
+  `ConfigureEntity<T>(Action<>)` entry (that API never shipped in v1.x);
+  expanded `DtdeOptionsBuilder` table with the current shorthand;
+  documented `ShardingBuilder<T>`, `DtdeShardGroupBuilder`, the new
+  `Context` / `Transaction` / savepoint members on
+  `ShardTransactionParticipant`, the cross-shard transaction coordinator's
+  current constructor signatures, `IShardGroup` / `IShardGroupRegistry`,
+  `ITransactionLog` + `InMemoryTransactionLog` / `FileBasedTransactionLog`,
+  and `IBulkInsertProvider` + `DefaultBulkInsertProvider` /
+  `BulkInsertProviderChain`. Added the `ExecuteStreamingAsync` method to
+  the `IShardedQueryExecutor` interface block.
+- `docs/development-plan/index.md` — added a "historical design
+  reference" banner so readers know those documents predate the
+  recent feature waves and code snippets may not match shipped APIs.
+
+**New tests:** `PublicApiContractTests` (2) regress against the
+`Context` / `Transaction` visibility and the
+`EnsureAllShardsCreatedAsync` backfill — 448/448 green now (was
+446 + 2 new).
+
 ### Samples and documentation refresh
 
 Two new samples covering the new feature areas, plus a full pass over

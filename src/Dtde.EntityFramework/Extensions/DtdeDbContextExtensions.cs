@@ -47,6 +47,13 @@ public static class DtdeDbContextExtensions
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // Force the lazy metadata-registry backfill so the global registry
+        // knows every sharded entity declared in OnModelCreating before any
+        // query / write path runs. Without this, the sharded query executor
+        // would resolve ShardingConfiguration == null and route every query
+        // to the default-group hot shard instead of the entity's group.
+        _ = context.MetadataRegistry;
+
         // Parent first: creates the base tables for non-sharded entities and,
         // in table-mode, the file/database that holds the shard tables.
         await context.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
